@@ -1,2 +1,5 @@
 # Ignore all .txt files
 *.txt
+
+# Exception for the system prompt configuration.
+!sysprompt.txt
