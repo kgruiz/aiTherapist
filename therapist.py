@@ -1,4 +1,4 @@
-"""
+r"""
 AI Therapist Application using Google Generative AI.
 
 This script implements a conversational AI therapist that uses Google's
@@ -12,33 +12,41 @@ Prerequisites:
     - Google Generative AI API Key set as an environment variable: GEMINI_API_KEY
     - Path to therapy notes directory set as an environment variable: NOTES_DIR_PATH
     - Required libraries installed:
-        pip install google-generativeai PyMuPDF pathlib
+        pip install google-generativeai PyMuPDF python-dotenv pathlib
 
 Setup:
     1. Create a file named `sysprompt.txt` in the same directory as this script
        containing the core AI personality and instructions (without user background).
     2. Create a file named `background.txt` in the same directory, containing
        the specific background information about the user.
-    3. Set the `GEMINI_API_KEY` environment variable with your API key.
+    3. Create a `.env` file in the same directory (optional, for local development)
+       and add your environment variables:
+       GEMINI_API_KEY='YOUR_API_KEY'
+       NOTES_DIR_PATH='/full/path/to/your/notes'
+    4. Alternatively, set the `GEMINI_API_KEY` and `NOTES_DIR_PATH` environment
+       variables directly in your system.
        Example (Linux/macOS): export GEMINI_API_KEY='YOUR_API_KEY'
-       Example (Windows CMD): set GEMINI_API_KEY=YOUR_API_KEY
-       Example (Windows PowerShell): $env:GEMINI_API_KEY='YOUR_API_KEY'
-    4. Set the `NOTES_DIR_PATH` environment variable to the full path of the
-       directory containing your PDF therapy notes.
        Example (Linux/macOS): export NOTES_DIR_PATH='/path/to/your/notes'
+       Example (Windows CMD): set GEMINI_API_KEY=YOUR_API_KEY
        Example (Windows CMD): set NOTES_DIR_PATH=C:\path\to\your\notes
+       Example (Windows PowerShell): $env:GEMINI_API_KEY='YOUR_API_KEY'
        Example (Windows PowerShell): $env:NOTES_DIR_PATH='C:\path\to\your\notes'
     5. Ensure the directory specified by NOTES_DIR_PATH exists.
 
 Execution:
-    python your_script_name.py
+    python therapist.py
 """
 
 import os
 from pathlib import Path
 
 import fitz  # PyMuPDF
+import google.api_core.exceptions
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file, if it exists
+load_dotenv()
 
 # --- Constants ---
 # Retrieve notes directory path from environment variable
@@ -137,7 +145,8 @@ def LoadTherapyNotes(directory: Path | None) -> str:
 
     #
     notesTexts = []
-    pdfFiles = list(directory.glob("*.pdf"))
+    # Sort files for consistent order (optional but good practice)
+    pdfFiles = sorted(list(directory.glob("*.pdf")))
 
     #
     if not pdfFiles:
@@ -256,8 +265,6 @@ def GenerateAiResponse(prompt: str, apiKey: str) -> str | None:
 
         #
         # --- Safety Settings (Example - Adjust as needed) ---
-        # Block potentially harmful content. You might adjust thresholds.
-        # Refer to Google AI documentation for details on categories and thresholds.
         safety_settings = [
             {
                 "category": "HARM_CATEGORY_HARASSMENT",
@@ -286,11 +293,24 @@ def GenerateAiResponse(prompt: str, apiKey: str) -> str | None:
         if not response.parts:
             #
             block_reason = "Unknown"
+            # Check if prompt_feedback exists and has block_reason
             if (
                 hasattr(response, "prompt_feedback")
                 and response.prompt_feedback.block_reason
             ):
-                block_reason = response.prompt_feedback.block_reason
+                block_reason = (
+                    response.prompt_feedback.block_reason.name
+                )  # Use .name for enum
+            # Check if finish_reason exists (alternative way blocking might be indicated)
+            elif (
+                hasattr(response, "candidates")
+                and response.candidates
+                and response.candidates[0].finish_reason.name != "STOP"
+            ):
+                block_reason = (
+                    f"Finish Reason: {response.candidates[0].finish_reason.name}"
+                )
+
             #
             print(
                 f"\nWarning: AI response was empty or blocked. Reason: {block_reason}"
@@ -305,22 +325,39 @@ def GenerateAiResponse(prompt: str, apiKey: str) -> str | None:
         # Return the generated text
         return response.text
 
-    # Handle specific API errors if possible, e.g., AuthenticationError, ResourceExhaustedError
-    except google.api_core.exceptions.PermissionDenied as e:
+    # --- Specific Google API Error Handling ---
+    except (
+        google.api_core.exceptions.PermissionDenied
+    ) as e:  # Now 'google' is defined via import
         print(
             f"\nAPI Error: Permission Denied. Check if the API key is valid, has access to "
             f"the model '{MODEL_NAME}', and the Gemini API is enabled in your Google Cloud project. Details: {e}"
         )
         return None
-    except google.api_core.exceptions.NotFound as e:
+    except (
+        google.api_core.exceptions.NotFound
+    ) as e:  # Now 'google' is defined via import
         print(
             f"\nAPI Error: Model Not Found. The model name '{MODEL_NAME}' might be incorrect "
-            f"or unavailable. Details: {e}"
+            f"or unavailable for your key. Details: {e}"
         )
         return None
+    except google.api_core.exceptions.ResourceExhausted as e:
+        print(
+            f"\nAPI Error: Quota Exceeded. You may have hit API rate limits or usage quotas. Details: {e}"
+        )
+        return None
+    except google.api_core.exceptions.InvalidArgument as e:
+        print(
+            f"\nAPI Error: Invalid Argument. Often related to prompt content or structure. Details: {e}"
+        )
+        # You might want to log the prompt here for debugging (beware of sensitive data)
+        # print(f"Problematic Prompt (last 100 chars): ...{prompt[-100:]}")
+        return None
+    # --- General Exception Handling ---
     except Exception as e:
         #
-        # Catch other potential API errors
+        # Catch other potential API errors or unexpected issues
         print(f"\nError during AI response generation: {e}")
         print(
             "Check API key, internet connection, model name, quota limits, and prompt content."
@@ -346,7 +383,7 @@ def main():
     if not API_KEY:
         #
         print("\nFatal Error: GEMINI_API_KEY environment variable is not set.")
-        print("Please set the environment variable and restart the application.")
+        print("Please set the environment variable (or use a .env file) and restart.")
         #
         return
 
@@ -508,7 +545,8 @@ def main():
         print("\n\nAI Therapist: Session interrupted by user. Goodbye.")
     except Exception as e:
         #
-        print(f"\nAn unexpected error occurred in the main loop: {e}")
+        # Catch unexpected errors in the main loop itself
+        print(f"\nAn unexpected error occurred outside of API generation: {e}")
     finally:
         #
         print("\n--- AI Therapist Session Ended ---")
