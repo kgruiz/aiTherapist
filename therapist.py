@@ -6,14 +6,14 @@ This script implements a conversational AI therapist that uses Google's
 Generative AI API (e.g., Gemini) and maintains conversation history within
 a single session. It loads a system prompt, user background, therapy notes,
 implements rate limiting, logs chat sessions, ensures .gitignore rules,
-and engages in a therapeutic conversation.
+and engages in a therapeutic conversation with enhanced console output using Rich.
 
 Prerequisites:
     - Python 3.10+
     - Google Generative AI API Key set as an environment variable: GEMINI_API_KEY
     - Path to therapy notes directory set as an environment variable: NOTES_DIR_PATH
     - Required libraries installed:
-        pip install google-generativeai PyMuPDF python-dotenv pathlib natsort
+        pip install google-generativeai PyMuPDF python-dotenv pathlib natsort rich
 
 Setup:
     1. Create `sysprompt.txt` (core AI instructions).
@@ -41,6 +41,13 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from natsort import natsorted  # Import natsorted
 
+# Rich imports for console formatting
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+from rich.text import Text
+
 # Load environment variables from .env file, if it exists
 load_dotenv()
 
@@ -54,10 +61,11 @@ HISTORY_DIR = Path("history")  # Directory to store chat logs, to be ignored by 
 GITIGNORE_FILE = Path(".gitignore")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# Warning: 'gemini-2.5-pro-exp-03-25' might be experimental. Use 'gemini-pro' or 'gemini-1.5-pro-latest' if issues arise.
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
 # Rate Limiting: Maximum number of requests allowed per minute
-REQUESTS_PER_MINUTE = 2
+REQUESTS_PER_MINUTE = 2  # Adjusted from user's code
 
 # --- Safety Settings (Example - Adjust as needed) ---
 SAFETY_SETTINGS = [
@@ -73,6 +81,9 @@ SAFETY_SETTINGS = [
     },
 ]
 
+# --- Initialize Rich Console ---
+console = Console()
+
 # --- Function Definitions ---
 
 
@@ -87,13 +98,15 @@ def EnsureGitignore():
     ignorePatterns = {
         BACKGROUND_FILE.name,  # e.g., "background.txt"
         f"{HISTORY_DIR.name}/",  # e.g., "history/" - trailing slash for directory
-        ".env",  # Ignore environment file
+        ".env",  # Good practice to ignore environment file
     }
     patternsToAdd = set()
     needsUpdate = False
 
     #
-    print(f"Checking {GITIGNORE_FILE} for necessary ignore patterns...")
+    console.print(
+        f"Checking [cyan]{GITIGNORE_FILE}[/] for necessary ignore patterns..."
+    )
 
     #
     try:
@@ -117,8 +130,8 @@ def EnsureGitignore():
             if patternsToAdd:
                 #
                 needsUpdate = True
-                print(
-                    f"  Will add missing patterns to {GITIGNORE_FILE}: {', '.join(patternsToAdd)}"
+                console.print(
+                    f"  [yellow]Will add missing patterns to {GITIGNORE_FILE}:[/] {', '.join(patternsToAdd)}"
                 )
         #
         else:
@@ -126,8 +139,8 @@ def EnsureGitignore():
             # File doesn't exist, need to create it and add all patterns
             needsUpdate = True
             patternsToAdd = ignorePatterns
-            print(
-                f"  {GITIGNORE_FILE} not found. Will create it with required patterns."
+            console.print(
+                f"  [yellow]{GITIGNORE_FILE} not found. Will create it with required patterns.[/]"
             )
 
         #
@@ -151,21 +164,27 @@ def EnsureGitignore():
                     #
                     f.write(f"{pattern}\n")
             #
-            print(f"  {GITIGNORE_FILE} updated successfully.")
+            console.print(f"  [green]{GITIGNORE_FILE} updated successfully.[/]")
         #
         else:
             #
-            print(f"  {GITIGNORE_FILE} already contains the necessary patterns.")
+            console.print(
+                f"  [green]{GITIGNORE_FILE} already contains the necessary patterns.[/]"
+            )
 
     except IOError as e:
         #
-        print(f"Error accessing or modifying {GITIGNORE_FILE}: {e}")
-        print("  Skipping .gitignore check/update.")
+        console.print(
+            f"[bold red]Error accessing or modifying {GITIGNORE_FILE}:[/] {e}"
+        )
+        console.print("  Skipping .gitignore check/update.")
     #
     except Exception as e:
         #
-        print(f"An unexpected error occurred during .gitignore check: {e}")
-        print("  Skipping .gitignore check/update.")
+        console.print(
+            f"[bold red]An unexpected error occurred during .gitignore check:[/] {e}"
+        )
+        console.print("  Skipping .gitignore check/update.")
 
 
 def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
@@ -191,21 +210,27 @@ def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
         #
         fileContent = filePath.read_text(encoding="utf-8")
         #
-        print(f"Successfully loaded {fileDescription} from: {filePath}")
+        console.print(
+            f"Successfully loaded {fileDescription} from: [cyan]{filePath}[/]"
+        )
 
         #
         return fileContent
 
     except FileNotFoundError:
         #
-        print(f"Error: {fileDescription.capitalize()} file not found at {filePath}")
+        console.print(
+            f"[bold red]Error:[/] {fileDescription.capitalize()} file not found at [cyan]{filePath}[/]"
+        )
 
         #
         return None
 
     except IOError as e:
         #
-        print(f"Error reading {fileDescription} file {filePath}: {e}")
+        console.print(
+            f"[bold red]Error reading {fileDescription} file {filePath}:[/] {e}"
+        )
 
         #
         return None
@@ -233,7 +258,9 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     #
     if directory is None:
         #
-        print("Info: NOTES_DIR_PATH env var not set. No therapy notes loaded.")
+        console.print(
+            "[yellow]Info:[/] NOTES_DIR_PATH env var not set. No therapy notes loaded."
+        )
 
         #
         return ""
@@ -241,8 +268,8 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     #
     if not directory.is_dir():
         #
-        print(
-            f"Error: Notes directory not found/invalid: {directory}. No notes loaded."
+        console.print(
+            f"[bold red]Error:[/] Notes directory not found/invalid: [cyan]{directory}[/]. No notes loaded."
         )
 
         #
@@ -256,27 +283,31 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     #
     if not pdfFiles:
         #
-        print(f"Info: No PDF files found in {directory}.")
+        console.print(f"[yellow]Info:[/] No PDF files found in [cyan]{directory}[/].")
 
         #
         return ""
 
     #
-    print(f"Found {len(pdfFiles)} PDF files in {directory}. Processing...")
+    console.print(
+        f"Found {len(pdfFiles)} PDF files in [cyan]{directory}[/]. Processing..."
+    )
     #
     processedCount = 0
 
     #
     for pdfPath in pdfFiles:
         #
-        print(f"  Processing: {pdfPath.name}...")
+        console.print(f"  Processing: [cyan]{pdfPath.name}[/]...")
 
         #
         try:
             #
             if not pdfPath.is_file():
                 #
-                print(f"  Warning: Skipping {pdfPath.name}, not a valid file.")
+                console.print(
+                    f"  [yellow]Warning:[/] Skipping [cyan]{pdfPath.name}[/], not a valid file."
+                )
                 continue
 
             #
@@ -295,31 +326,41 @@ def LoadTherapyNotes(directory: Path | None) -> str:
                 notesTexts.append(
                     f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
                 )
-                print(f"  Successfully extracted text from {pdfPath.name}.")
+                console.print(
+                    f"  [green]Successfully extracted text from {pdfPath.name}.[/]"
+                )
                 processedCount += 1
             #
             else:
                 #
-                print(f"  Warning: No text extracted from {pdfPath.name}.")
+                console.print(
+                    f"  [yellow]Warning:[/] No text extracted from [cyan]{pdfPath.name}[/]."
+                )
 
         except fitz.errors.FileDataError:
             #
-            print(f"  Error: Corrupt/password-protected PDF: {pdfPath.name}.")
+            console.print(
+                f"  [bold red]Error:[/] Corrupt/password-protected PDF: [cyan]{pdfPath.name}[/]."
+            )
         #
         except Exception as e:
             #
-            print(f"  Error processing PDF {pdfPath.name}: {e}")
+            console.print(f"  [bold red]Error processing PDF {pdfPath.name}:[/] {e}")
 
     #
     if not notesTexts:
         #
-        print("Warning: Could not extract text from any valid PDF files.")
+        console.print(
+            "[bold yellow]Warning:[/] Could not extract text from any valid PDF files."
+        )
 
         #
         return ""
 
     #
-    print(f"Successfully combined therapy notes from {processedCount} PDF(s).")
+    console.print(
+        f"[green]Successfully combined therapy notes from {processedCount} PDF(s).[/]"
+    )
 
     #
     # Combine all extracted notes into a single string
@@ -334,7 +375,7 @@ def main():
     Main function to run the AI Therapist application with multi-turn chat and logging.
     """
 
-    print("--- AI Therapist Initializing ---")
+    console.print(Panel("[bold cyan]AI Therapist Initializing[/]", expand=False))
 
     # --- Ensure Gitignore Rules ---
     EnsureGitignore()  # Check/update .gitignore before proceeding
@@ -344,8 +385,13 @@ def main():
     #
     if not API_KEY:
         #
-        print("\nFatal Error: GEMINI_API_KEY environment variable not set.")
-        print("Please set the environment variable (or use a .env file) and restart.")
+        console.print(
+            Panel(
+                "[bold red]Fatal Error: GEMINI_API_KEY environment variable not set.[/]\nPlease set the environment variable (or use a .env file) and restart.",
+                title="Error",
+                border_style="red",
+            )
+        )
 
         #
         return
@@ -353,7 +399,9 @@ def main():
     #
     if not NOTES_DIR_PATH_STR:  # Check if the path string was retrieved
         #
-        print("Warning: 'NOTES_DIR_PATH' environment variable not set or invalid.")
+        console.print(
+            "[yellow]Warning:[/] 'NOTES_DIR_PATH' environment variable not set or invalid."
+        )
         # NOTES_DIR will be None, LoadTherapyNotes handles this.
 
     #
@@ -367,9 +415,11 @@ def main():
     #
     except OSError as e:
         #
-        print(f"Error creating history directory {HISTORY_DIR}: {e}")
+        console.print(
+            f"[bold red]Error creating history directory {HISTORY_DIR}:[/] {e}"
+        )
         # Decide if this is fatal or just proceed without logging
-        print("Proceeding without chat logging.")
+        console.print("[yellow]Proceeding without chat logging.[/]")
         # logFile remains None
     #
     else:
@@ -377,7 +427,7 @@ def main():
         # Generate a unique filename for this session's log
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         logFilename = HISTORY_DIR / f"chat_log_{timestamp}.txt"
-        print(f"Logging chat session to: {logFilename}")
+        console.print(f"Logging chat session to: [cyan]{logFilename}[/]")
         # Open the log file in append mode, using 'utf-8' encoding
         try:
             #
@@ -385,7 +435,7 @@ def main():
         #
         except IOError as e:
             #
-            print(f"Error opening log file {logFilename}: {e}")
+            console.print(f"[bold red]Error opening log file {logFilename}:[/] {e}")
             logFile = None  # Ensure logFile is None if opening fails
 
     # --- Load Static Context ---
@@ -396,7 +446,13 @@ def main():
     #
     if baseSystemPrompt is None:
         #
-        print("Fatal Error: Could not load system prompt. Exiting.")
+        console.print(
+            Panel(
+                "[bold red]Fatal Error: Could not load system prompt. Exiting.[/]",
+                title="Error",
+                border_style="red",
+            )
+        )
         if logFile:
             logFile.close()  # Close log file if open
 
@@ -409,7 +465,9 @@ def main():
     #
     if userBackground is None:
         #
-        print("Warning: Could not load user background file. Using fallback.")
+        console.print(
+            "[yellow]Warning:[/] Could not load user background file. Using fallback."
+        )
         userBackground = "No user background information was loaded."
 
     #
@@ -493,19 +551,33 @@ def main():
         chat = model.start_chat(history=[])  # Start with empty user/model turn history
 
         #
-        print("\n--- AI Therapist Ready ---")
-        print(f"Model: {MODEL_NAME}")
-        print(f"Rate Limit: {REQUESTS_PER_MINUTE} requests per minute.")
-        print("Type 'quit' or 'exit' to end the session.")
-        print("Disclaimer: AI for support, not professional therapy/medical advice.")
+        console.print(
+            Panel(
+                f"[bold green]AI Therapist Ready[/]\n"
+                f"Model: [cyan]{MODEL_NAME}[/]\n"
+                f"Rate Limit: {REQUESTS_PER_MINUTE} requests per minute.\n\n"
+                "Type '[bold]quit[/]' or '[bold]exit[/]' to end the session.\n"
+                "[dim]Disclaimer: AI for support, not professional therapy/medical advice.[/]",
+                title="Session Started",
+                border_style="green",
+                expand=False,
+            )
+        )
 
     except Exception as e:
         #
-        errorMsg = f"\nFatal Error during AI Initialization: {e}\nCheck API key, model name, and network connection."
-        print(errorMsg)
+        errorMsgContent = f"Fatal Error during AI Initialization: {e}\nCheck API key, model name, and network connection."
+        errorMsg = Panel(
+            f"[bold red]{errorMsgContent}[/]",
+            title="Initialization Error",
+            border_style="red",
+        )
+        console.print(errorMsg)
         if logFile:
             #
-            logFile.write(errorMsg + "\n--- SESSION ENDED DUE TO INIT ERROR ---\n")
+            logFile.write(
+                errorMsgContent + "\n--- SESSION ENDED DUE TO INIT ERROR ---\n"
+            )
             logFile.close()
 
         #
@@ -523,8 +595,8 @@ def main():
             #
             # Get user input
             try:
-                #
-                userInput = input("\nYou: ").strip()
+                # Use console.input for rich prompt
+                userInput = console.input(Text("\nYou: ", style="bold blue")).strip()
 
                 #
                 if not userInput:  # Handle empty input
@@ -532,18 +604,35 @@ def main():
 
             except EOFError:
                 #
-                print("\nAI Therapist: Input stream closed. Ending session.")
+                console.print(
+                    "\n[yellow]AI Therapist: Input stream closed. Ending session.[/]"
+                )
                 if logFile:
                     logFile.write("\n--- Input stream closed by user ---\n")
 
                 #
                 break
+            #
+            except KeyboardInterrupt:  # Catch Ctrl+C during input
+                #
+                console.print(
+                    "\n\n[yellow]AI Therapist: Session interrupted by user. Goodbye.[/]"
+                )
+                if logFile:
+                    logFile.write(
+                        "\n--- Session interrupted by user (KeyboardInterrupt during input) ---\n"
+                    )
+
+                #
+                break  # Exit the loop cleanly
 
             #
             # Check for exit command
             if userInput.lower() in ["quit", "exit"]:
                 #
-                print("\nAI Therapist: Ending session as requested. Take care.")
+                console.print(
+                    "\n[yellow]AI Therapist: Ending session as requested. Take care.[/]"
+                )
                 if logFile:
                     logFile.write(
                         "\n--- Session ended by user command ('quit'/'exit') ---\n"
@@ -578,29 +667,42 @@ def main():
                 # Calculate time needed to wait until the oldest message is > 60s old
                 waitTime = 60 - timeSinceOldest + 0.1  # Add small buffer
                 waitMsg = (
-                    f"\nRate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
+                    f"Rate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
                 )
 
                 #
-                print(waitMsg)
+                console.print(
+                    Panel(
+                        f"[bold yellow]{waitMsg}[/]",
+                        border_style="yellow",
+                        expand=False,
+                    )
+                )
                 if logFile:
                     logFile.write(
                         f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {waitMsg.strip()}\n"
                     )
 
                 #
-                # Display countdown timer
-                for i in range(int(waitTime), 0, -1):
+                # Display rich progress bar timer
+                with Progress(
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TimeRemainingColumn(),
+                    console=console,
+                    transient=True,  # Clear the progress bar when done
+                ) as progress:
                     #
-                    countdownMsg = f"  Next message available in {i} seconds...   \r"
-                    print(countdownMsg, end="")
-                    # Optionally log countdown start/end
-                    # if i == int(waitTime) and logFile: logFile.write(f"  (Rate limit wait started: {waitTime:.1f}s)\n")
-                    time.sleep(1)
+                    waitTask = progress.add_task(
+                        "Time until next message:", total=waitTime
+                    )
+                    while not progress.finished:
+                        #
+                        progress.update(waitTask, advance=0.1)
+                        time.sleep(0.1)
 
                 #
-                print(" " * 50 + "\r", end="")  # Clear the countdown line
-                time.sleep(waitTime % 1)  # Sleep for remaining fraction of a second
                 if logFile:
                     logFile.write(f"  (Rate limit wait finished)\n")
 
@@ -615,7 +717,7 @@ def main():
             # --- Send Message and Get Response ---
 
             #
-            print("\nAI Therapist: (Thinking...)")
+            console.print(Text("\nAI Therapist: (Thinking...)", style="italic dim"))
             aiResponseText = None  # Initialize in case of error before assignment
 
             #
@@ -655,17 +757,22 @@ def main():
                         blockReason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
 
                     #
-                    warningMsg = (
-                        f"\nWarning: AI response empty/blocked. Reason: {blockReason}"
+                    warningMsgContent = (
+                        f"AI response empty/blocked. Reason: {blockReason}"
                     )
-                    print(warningMsg)
+                    warningMsg = Panel(
+                        f"[bold yellow]Warning:[/] {warningMsgContent}",
+                        title="Warning",
+                        border_style="yellow",
+                    )
+                    console.print(warningMsg)
                     aiResponseText = (
                         "I apologize, but I encountered an issue or the content was blocked. "
                         "Could you rephrase or try a different topic?"
                     )
                     if logFile:
                         logFile.write(
-                            f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System:{warningMsg}\n"
+                            f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {warningMsgContent}\n"
                         )
 
                 #
@@ -674,8 +781,15 @@ def main():
                     aiResponseText = response.text
 
                 #
-                # Print the AI's response
-                print(f"\nAI Therapist: {aiResponseText}")
+                # Print the AI's response using Markdown rendering within a Panel
+                console.print(
+                    Panel(
+                        Markdown(aiResponseText),
+                        title="AI Therapist",
+                        border_style="cyan",
+                        expand=False,  # Don't force panel to full width
+                    )
+                )
 
                 # --- Log AI Response ---
                 if logFile:
@@ -688,22 +802,32 @@ def main():
             # --- API Error Handling within the loop ---
             except google.api_core.exceptions.PermissionDenied as e:
                 #
-                errorMsg = f"\nAPI Error: Permission Denied. Check API key/model access. Details: {e}"
-                print(errorMsg)
+                errorMsgContent = f"API Error: Permission Denied. Check API key/model access. Details: {e}"
+                errorMsg = Panel(
+                    f"[bold red]{errorMsgContent}[/]",
+                    title="API Error",
+                    border_style="red",
+                )
+                console.print(errorMsg)
                 if logFile:
                     logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
                     )
                 # Decide whether to break or allow retry
                 # break
             #
             except google.api_core.exceptions.NotFound as e:
                 #
-                errorMsg = f"\nAPI Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
-                print(errorMsg)
+                errorMsgContent = f"API Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
+                errorMsg = Panel(
+                    f"[bold red]{errorMsgContent}[/]",
+                    title="API Error",
+                    border_style="red",
+                )
+                console.print(errorMsg)
                 if logFile:
                     logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
 
                 #
@@ -711,14 +835,19 @@ def main():
             #
             except google.api_core.exceptions.ResourceExhausted as e:
                 #
-                errorMsg = f"\nAPI Error: Quota Exceeded. Details: {e}"
-                print(errorMsg)
+                errorMsgContent = f"API Error: Quota Exceeded. Details: {e}"
+                errorMsg = Panel(
+                    f"[bold red]{errorMsgContent}[/]",
+                    title="API Error",
+                    border_style="red",
+                )
+                console.print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
                 if logFile:
                     logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
 
                 #
@@ -726,45 +855,55 @@ def main():
             #
             except google.api_core.exceptions.InvalidArgument as e:
                 #
-                errorMsg = f"\nAPI Error: Invalid Argument (check prompt/content). Details: {e}"
-                print(errorMsg)
+                errorMsgContent = (
+                    f"API Error: Invalid Argument (check prompt/content). Details: {e}"
+                )
+                errorMsg = Panel(
+                    f"[bold red]{errorMsgContent}[/]",
+                    title="API Error",
+                    border_style="red",
+                )
+                console.print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
                 if logFile:
                     logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
                     )
                 # Log problematic input if needed (beware sensitive data)
                 # if logFile: logFile.write(f"Input causing error: {userInput}\n")
             #
             except Exception as e:
                 #
-                errorMsg = f"\nError during AI response generation: {e}"
-                print(errorMsg)
+                errorMsgContent = f"Error during AI response generation: {e}"
+                errorMsg = Panel(
+                    f"[bold red]{errorMsgContent}[/]", title="Error", border_style="red"
+                )
+                console.print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
                 if logFile:
                     logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
                     )
                 # General error, maybe allow user to try again
 
     # --- General Error Handling & Cleanup ---
-    except KeyboardInterrupt:
+    # KeyboardInterrupt is now caught during input()
+    except Exception as e:  # Catch other unexpected errors in the loop
         #
-        print("\n\nAI Therapist: Session interrupted by user. Goodbye.")
-        if logFile:
-            logFile.write("\n--- Session interrupted by user (KeyboardInterrupt) ---\n")
-    #
-    except Exception as e:
-        #
-        errorMsg = f"\nAn unexpected error occurred in the main loop: {e}"
-        print(errorMsg)
+        errorMsgContent = f"An unexpected error occurred in the main loop: {e}"
+        errorMsg = Panel(
+            f"[bold red]{errorMsgContent}[/]",
+            title="Unexpected Error",
+            border_style="red",
+        )
+        console.print(errorMsg)
         if logFile:
             logFile.write(
-                f"\n{errorMsg}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
+                f"\n{errorMsgContent}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
             )
     #
     finally:
@@ -777,9 +916,9 @@ def main():
             )
             logFile.close()
             if logFilename:  # Check if logFilename was set
-                print(f"Chat log saved to: {logFilename}")
+                console.print(f"Chat log saved to: [cyan]{logFilename}[/]")
         #
-        print("\n--- AI Therapist Session Ended ---")
+        console.print(Panel("[bold cyan]AI Therapist Session Ended[/]", expand=False))
 
 
 # --- Main Execution ---
