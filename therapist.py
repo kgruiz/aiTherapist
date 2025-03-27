@@ -40,12 +40,21 @@ import google.api_core.exceptions
 import google.generativeai as genai
 from dotenv import load_dotenv
 from natsort import natsorted  # Import natsorted
+from rich.align import Align  # For centering
 
 # Rich imports for console formatting
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
+from rich.rule import Rule  # For separators
 from rich.text import Text
 
 # Load environment variables from .env file, if it exists
@@ -92,7 +101,7 @@ def EnsureGitignore():
     Checks if .gitignore exists and ensures specific files/directories are ignored.
 
     Creates .gitignore if it doesn't exist. Appends necessary ignore rules
-    for sensitive files like background info and chat history.
+    for sensitive files like background info and chat history. Uses Rich output.
     """
 
     ignorePatterns = {
@@ -131,8 +140,15 @@ def EnsureGitignore():
                 #
                 needsUpdate = True
                 console.print(
-                    f"  [yellow]Will add missing patterns to {GITIGNORE_FILE}:[/] {', '.join(patternsToAdd)}"
+                    f"  [yellow]Will add missing patterns:[/yellow] {', '.join(patternsToAdd)}"
                 )
+            #
+            else:
+                #
+                console.print(
+                    f"  [green]Already contains the necessary patterns.[/green]"
+                )
+
         #
         else:
             #
@@ -140,7 +156,7 @@ def EnsureGitignore():
             needsUpdate = True
             patternsToAdd = ignorePatterns
             console.print(
-                f"  [yellow]{GITIGNORE_FILE} not found. Will create it with required patterns.[/]"
+                f"  [yellow]{GITIGNORE_FILE} not found. Will create it.[/yellow]"
             )
 
         #
@@ -164,13 +180,7 @@ def EnsureGitignore():
                     #
                     f.write(f"{pattern}\n")
             #
-            console.print(f"  [green]{GITIGNORE_FILE} updated successfully.[/]")
-        #
-        else:
-            #
-            console.print(
-                f"  [green]{GITIGNORE_FILE} already contains the necessary patterns.[/]"
-            )
+            console.print(f"  [green]{GITIGNORE_FILE} updated successfully.[/green]")
 
     except IOError as e:
         #
@@ -186,10 +196,14 @@ def EnsureGitignore():
         )
         console.print("  Skipping .gitignore check/update.")
 
+    #
+    # Add a rule after the check is complete
+    console.print(Rule("Gitignore Check Complete", style="dim blue"))
+
 
 def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
     """
-    Loads text content from a specified file.
+    Loads text content from a specified file. Uses Rich for output.
 
     Parameters
     ----------
@@ -206,31 +220,29 @@ def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
 
     """
 
+    #
+    console.print(f"Loading {fileDescription}: [cyan]{filePath}[/]", style="dim")
+
+    #
     try:
         #
         fileContent = filePath.read_text(encoding="utf-8")
         #
-        console.print(
-            f"Successfully loaded {fileDescription} from: [cyan]{filePath}[/]"
-        )
+        # console.print(f"  [green]Successfully loaded.[/]") # Keep output less verbose
 
         #
         return fileContent
 
     except FileNotFoundError:
         #
-        console.print(
-            f"[bold red]Error:[/] {fileDescription.capitalize()} file not found at [cyan]{filePath}[/]"
-        )
+        console.print(f"  [bold red]Error:[/] File not found.")
 
         #
         return None
 
     except IOError as e:
         #
-        console.print(
-            f"[bold red]Error reading {fileDescription} file {filePath}:[/] {e}"
-        )
+        console.print(f"  [bold red]Error reading file:[/] {e}")
 
         #
         return None
@@ -239,6 +251,7 @@ def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
 def LoadTherapyNotes(directory: Path | None) -> str:
     """
     Loads and extracts text from all PDF files in the specified directory.
+    Uses Rich Progress bar for visual feedback.
 
     Parameters
     ----------
@@ -289,65 +302,90 @@ def LoadTherapyNotes(directory: Path | None) -> str:
         return ""
 
     #
-    console.print(
-        f"Found {len(pdfFiles)} PDF files in [cyan]{directory}[/]. Processing..."
-    )
-    #
     processedCount = 0
+    errorsEncountered = 0
 
     #
-    for pdfPath in pdfFiles:
+    # Use Rich Progress for PDF processing visualization
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),  # Set bar width to expand
+        TaskProgressColumn(),  # Percentage for the current task
+        TextColumn("[cyan]({task.completed}/{task.total})[/]"),
+        console=console,
+    ) as progress:
         #
-        console.print(f"  Processing: [cyan]{pdfPath.name}[/]...")
+        pdfTask = progress.add_task(
+            f"Processing {len(pdfFiles)} PDFs in [cyan]{directory.name}[/]",
+            total=len(pdfFiles),
+        )
 
         #
-        try:
+        for pdfPath in pdfFiles:
             #
-            if not pdfPath.is_file():
+            progress.update(pdfTask, description=f"Processing [cyan]{pdfPath.name}[/]")
+
+            #
+            try:
                 #
-                console.print(
-                    f"  [yellow]Warning:[/] Skipping [cyan]{pdfPath.name}[/], not a valid file."
-                )
-                continue
+                if not pdfPath.is_file():
+                    # console.print(f"  [yellow]Warning:[/] Skipping [cyan]{pdfPath.name}[/], not a valid file.") # Too verbose with progress bar
+                    progress.console.print(
+                        f"[dim]  Skipping non-file: {pdfPath.name}[/dim]"
+                    )
+                    continue
 
-            #
-            doc = fitz.open(pdfPath)
-            pdfText = "".join(
-                page.get_text("text") for page in doc.pages() if page.get_text("text")
-            )
-            doc.close()
-
-            #
-            pdfTextStripped = pdfText.strip()
-
-            #
-            if pdfTextStripped:
                 #
-                notesTexts.append(
-                    f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
+                doc = fitz.open(pdfPath)
+                pdfText = "".join(
+                    page.get_text("text")
+                    for page in doc.pages()
+                    if page.get_text("text")
                 )
-                console.print(
-                    f"  [green]Successfully extracted text from {pdfPath.name}.[/]"
-                )
-                processedCount += 1
-            #
-            else:
-                #
-                console.print(
-                    f"  [yellow]Warning:[/] No text extracted from [cyan]{pdfPath.name}[/]."
-                )
+                doc.close()
 
-        except fitz.errors.FileDataError:
+                #
+                pdfTextStripped = pdfText.strip()
+
+                #
+                if pdfTextStripped:
+                    #
+                    notesTexts.append(
+                        f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
+                    )
+                    # console.print(f"  [green]Successfully extracted text from {pdfPath.name}.[/]") # Too verbose
+                    processedCount += 1
+                #
+                else:
+                    #
+                    # console.print(f"  [yellow]Warning:[/] No text extracted from [cyan]{pdfPath.name}[/].") # Too verbose
+                    progress.console.print(
+                        f"[yellow]  No text in: {pdfPath.name}[/yellow]"
+                    )
+
+            except fitz.errors.FileDataError:
+                #
+                progress.console.print(
+                    f"[red]  Error (corrupt/pwd?): {pdfPath.name}[/red]"
+                )
+                errorsEncountered += 1
             #
-            console.print(
-                f"  [bold red]Error:[/] Corrupt/password-protected PDF: [cyan]{pdfPath.name}[/]."
-            )
-        #
-        except Exception as e:
+            except Exception as e:
+                #
+                progress.console.print(
+                    f"[red]  Error processing {pdfPath.name}: {e}[/red]"
+                )
+                errorsEncountered += 1
             #
-            console.print(f"  [bold red]Error processing PDF {pdfPath.name}:[/] {e}")
+            finally:
+                #
+                progress.update(
+                    pdfTask, advance=1
+                )  # Advance progress bar regardless of success/failure
 
     #
+    # Print summary after progress bar finishes
     if not notesTexts:
         #
         console.print(
@@ -358,8 +396,10 @@ def LoadTherapyNotes(directory: Path | None) -> str:
         return ""
 
     #
+    summary_color = "green" if errorsEncountered == 0 else "yellow"
     console.print(
-        f"[green]Successfully combined therapy notes from {processedCount} PDF(s).[/]"
+        f"[{summary_color}]Successfully combined therapy notes from {processedCount} PDF(s).[/]"
+        f"{f' ([red]{errorsEncountered} errors[/])' if errorsEncountered > 0 else ''}"
     )
 
     #
@@ -375,7 +415,7 @@ def main():
     Main function to run the AI Therapist application with multi-turn chat and logging.
     """
 
-    console.print(Panel("[bold cyan]AI Therapist Initializing[/]", expand=False))
+    console.print(Rule("[bold cyan]AI Therapist Initializing[/]", style="cyan"))
 
     # --- Ensure Gitignore Rules ---
     EnsureGitignore()  # Check/update .gitignore before proceeding
@@ -437,6 +477,8 @@ def main():
             #
             console.print(f"[bold red]Error opening log file {logFilename}:[/] {e}")
             logFile = None  # Ensure logFile is None if opening fails
+
+    console.print(Rule("Loading Context", style="dim"))
 
     # --- Load Static Context ---
 
@@ -531,6 +573,8 @@ def main():
         logFile.write("\n--- End System Instruction ---\n\n")
         logFile.flush()  # Ensure initial info is written
 
+    console.print(Rule("Initializing AI Model", style="dim"))
+
     # --- Initialize Google AI ---
 
     #
@@ -551,18 +595,18 @@ def main():
         chat = model.start_chat(history=[])  # Start with empty user/model turn history
 
         #
-        console.print(
-            Panel(
-                f"[bold green]AI Therapist Ready[/]\n"
-                f"Model: [cyan]{MODEL_NAME}[/]\n"
-                f"Rate Limit: {REQUESTS_PER_MINUTE} requests per minute.\n\n"
-                "Type '[bold]quit[/]' or '[bold]exit[/]' to end the session.\n"
-                "[dim]Disclaimer: AI for support, not professional therapy/medical advice.[/]",
-                title="Session Started",
-                border_style="green",
-                expand=False,
-            )
+        # Display centered "Ready" panel
+        readyPanel = Panel(
+            f"[bold green]AI Therapist Ready[/]\n"
+            f"Model: [cyan]{MODEL_NAME}[/]\n"
+            f"Rate Limit: {REQUESTS_PER_MINUTE} requests per minute.\n\n"
+            "Type '[bold]quit[/]' or '[bold]exit[/]' to end the session.\n"
+            "[dim]Disclaimer: AI for support, not professional therapy/medical advice.[/]",
+            title="Session Started",
+            border_style="green",
+            expand=False,
         )
+        console.print(Align.center(readyPanel))
 
     except Exception as e:
         #
@@ -687,7 +731,7 @@ def main():
                 # Display rich progress bar timer
                 with Progress(
                     TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
+                    BarColumn(bar_width=None),  # Use full width
                     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                     TimeRemainingColumn(),
                     console=console,
@@ -695,7 +739,7 @@ def main():
                 ) as progress:
                     #
                     waitTask = progress.add_task(
-                        "Time until next message:", total=waitTime
+                        "[yellow]Time until next message:[/]", total=waitTime
                     )
                     while not progress.finished:
                         #
@@ -918,7 +962,7 @@ def main():
             if logFilename:  # Check if logFilename was set
                 console.print(f"Chat log saved to: [cyan]{logFilename}[/]")
         #
-        console.print(Panel("[bold cyan]AI Therapist Session Ended[/]", expand=False))
+        console.print(Rule("[bold cyan]AI Therapist Session Ended[/]", style="cyan"))
 
 
 # --- Main Execution ---
