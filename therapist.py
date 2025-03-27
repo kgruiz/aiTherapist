@@ -5,7 +5,7 @@ AI Therapist Application using Google Generative AI (Multi-Turn Chat).
 This script implements a conversational AI therapist that uses Google's
 Generative AI API (e.g., Gemini) and maintains conversation history within
 a single session. It loads a system prompt, user background, therapy notes,
-and engages in a therapeutic conversation.
+implements rate limiting, and engages in a therapeutic conversation.
 
 Prerequisites:
     - Python 3.10+
@@ -27,6 +27,8 @@ Execution:
 """
 
 import os
+import time  # For rate limiting
+from collections import deque  # For rate limiting timestamp tracking
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -39,15 +41,16 @@ from natsort import natsorted  # Import natsorted
 load_dotenv()
 
 # --- Constants ---
-
 NOTES_DIR_PATH_STR = os.environ.get("NOTES_DIR_PATH")
 NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 SYS_PROMPT_FILE = Path("sysprompt.txt")
 BACKGROUND_FILE = Path("background.txt")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Warning: 'gemini-2.5-pro-exp-03-25' might be experimental. Use 'gemini-pro' or 'gemini-1.5-pro-latest' if issues arise.
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
+
+# Rate Limiting: Maximum number of requests allowed per minute
+REQUESTS_PER_MINUTE = 2
 
 # --- Safety Settings (Example - Adjust as needed) ---
 SAFETY_SETTINGS = [
@@ -162,7 +165,7 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     #
     print(f"Found {len(pdfFiles)} PDF files in {directory}. Processing...")
     #
-    processed_count = 0
+    processedCount = 0
 
     #
     for pdfPath in pdfFiles:
@@ -194,7 +197,7 @@ def LoadTherapyNotes(directory: Path | None) -> str:
                     f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
                 )
                 print(f"  Successfully extracted text from {pdfPath.name}.")
-                processed_count += 1
+                processedCount += 1
             #
             else:
                 #
@@ -217,7 +220,7 @@ def LoadTherapyNotes(directory: Path | None) -> str:
         return ""
 
     #
-    print(f"Successfully combined therapy notes from {processed_count} PDF(s).")
+    print(f"Successfully combined therapy notes from {processedCount} PDF(s).")
 
     #
     # Combine all extracted notes into a single string
@@ -280,10 +283,10 @@ def main():
     # Combine all static context into one block for the model's system instruction
 
     #
-    system_instruction_parts = [baseSystemPrompt]
+    systemInstructionParts = [baseSystemPrompt]
 
     #
-    system_instruction_parts.append(
+    systemInstructionParts.append(
         "\n\n--- USER BACKGROUND INFORMATION ---\n"
         "Use this information to personalize responses and understand context.\n\n"
         f"{userBackground}\n\n"
@@ -293,7 +296,7 @@ def main():
     #
     if therapyNotesText:
         #
-        system_instruction_parts.append(
+        systemInstructionParts.append(
             "\n\n--- BEGIN THERAPY NOTES HISTORY ---\n"
             "Use these notes (prioritizing over background if conflicting) for context.\n\n"
             f"{therapyNotesText}\n\n"
@@ -302,7 +305,7 @@ def main():
     #
     else:
         #
-        system_instruction_parts.append(
+        systemInstructionParts.append(
             "\n\n--- THERAPY NOTES HISTORY ---\n"
             "No therapy notes loaded. Base responses on background and conversation."
             "\n--- END THERAPY NOTES HISTORY ---"
@@ -310,7 +313,7 @@ def main():
 
     #
     # Append Ethical Guidelines Reminder
-    system_instruction_parts.append(
+    systemInstructionParts.append(
         "\n\n--- IMPORTANT REMINDERS ---\n"
         "1. Role: AI assistant, NOT licensed therapist. No diagnoses/treatment.\n"
         "2. Ethics: Adhere to initial system prompt guidelines.\n"
@@ -321,7 +324,7 @@ def main():
     )
 
     #
-    combined_system_instruction = "".join(system_instruction_parts)
+    combinedSystemInstruction = "".join(systemInstructionParts)
 
     # --- Initialize Google AI ---
 
@@ -335,7 +338,7 @@ def main():
         model = genai.GenerativeModel(
             MODEL_NAME,
             safety_settings=SAFETY_SETTINGS,
-            system_instruction=combined_system_instruction,
+            system_instruction=combinedSystemInstruction,
         )
 
         #
@@ -345,6 +348,7 @@ def main():
         #
         print("\n--- AI Therapist Ready ---")
         print(f"Model: {MODEL_NAME}")
+        print(f"Rate Limit: {REQUESTS_PER_MINUTE} requests per minute.")
         print("Type 'quit' or 'exit' to end the session.")
         print("Disclaimer: AI for support, not professional therapy/medical advice.")
 
@@ -357,6 +361,9 @@ def main():
         return
 
     # --- Conversation Loop ---
+
+    # Initialize deque to store timestamps of messages sent
+    messageTimestamps = deque()
 
     #
     try:
@@ -388,6 +395,48 @@ def main():
                 #
                 break
 
+            # --- Rate Limiting Check ---
+
+            #
+            currentTime = time.time()
+
+            # Remove timestamps older than 60 seconds from the left
+            while messageTimestamps and currentTime - messageTimestamps[0] > 60:
+                #
+                messageTimestamps.popleft()
+
+            #
+            # Check if the number of recent messages meets or exceeds the limit
+            if len(messageTimestamps) >= REQUESTS_PER_MINUTE:
+                #
+                timeSinceOldest = currentTime - messageTimestamps[0]
+                # Calculate time needed to wait until the oldest message is > 60s old
+                waitTime = 60 - timeSinceOldest + 0.1  # Add small buffer
+
+                #
+                print(
+                    f"\nRate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
+                )
+
+                #
+                # Display countdown timer
+                for i in range(int(waitTime), 0, -1):
+                    #
+                    print(f"  Next message available in {i} seconds...   \r", end="")
+                    time.sleep(1)
+
+                #
+                print(" " * 50 + "\r", end="")  # Clear the countdown line
+                time.sleep(waitTime % 1)  # Sleep for remaining fraction of a second
+
+                #
+                # Update current time after waiting
+                currentTime = time.time()
+                # Re-clean timestamps after waiting (optional but good practice)
+                while messageTimestamps and currentTime - messageTimestamps[0] > 60:
+                    #
+                    messageTimestamps.popleft()
+
             # --- Send Message and Get Response ---
 
             #
@@ -395,6 +444,10 @@ def main():
 
             #
             try:
+                #
+                # Record the timestamp *before* sending the message
+                messageTimestamps.append(time.time())
+
                 #
                 # Send message - chat history is automatically updated by the object
                 response = chat.send_message(userInput)
@@ -405,7 +458,7 @@ def main():
                 #
                 if not response.parts:
                     #
-                    block_reason = "Unknown"
+                    blockReason = "Unknown"  # Renamed variable
 
                     #
                     if (
@@ -413,7 +466,7 @@ def main():
                         and response.prompt_feedback.block_reason
                     ):
                         #
-                        block_reason = (
+                        blockReason = (
                             response.prompt_feedback.block_reason.name
                         )  # Use .name for enum
                     #
@@ -423,11 +476,11 @@ def main():
                         and response.candidates[0].finish_reason.name != "STOP"
                     ):
                         #
-                        block_reason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
+                        blockReason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
 
                     #
                     print(
-                        f"\nWarning: AI response empty/blocked. Reason: {block_reason}"
+                        f"\nWarning: AI response empty/blocked. Reason: {blockReason}"
                     )
                     aiResponseText = (
                         "I apologize, but I encountered an issue or the content was blocked. "
@@ -465,6 +518,10 @@ def main():
                 print(f"\nAPI Error: Quota Exceeded. Details: {e}")
                 # Maybe wait and retry, or break
 
+                # Remove the timestamp for the failed request
+                if messageTimestamps:
+                    messageTimestamps.pop()
+
                 #
                 break
             #
@@ -475,11 +532,19 @@ def main():
                 )
                 # Log problematic input if needed (beware sensitive data)
                 # print(f"Input causing error: {userInput}")
+
+                # Remove the timestamp for the failed request
+                if messageTimestamps:
+                    messageTimestamps.pop()
             #
             except Exception as e:
                 #
                 print(f"\nError during AI response generation: {e}")
                 # General error, maybe allow user to try again
+
+                # Remove the timestamp for the failed request
+                if messageTimestamps:
+                    messageTimestamps.pop()
 
     # --- General Error Handling & Cleanup ---
     except KeyboardInterrupt:
