@@ -1,40 +1,29 @@
-r"""
-AI Therapist Application using Google Generative AI.
+# -*- coding: utf-8 -*-
+"""
+AI Therapist Application using Google Generative AI (Multi-Turn Chat).
 
 This script implements a conversational AI therapist that uses Google's
-Generative AI API (e.g., Gemini). It loads a system prompt defining the AI's
-personality, background information about the user from a separate file,
-incorporates therapy notes from PDF files for context, and engages in a
-therapeutic conversation with the user.
+Generative AI API (e.g., Gemini) and maintains conversation history within
+a single session. It loads a system prompt, user background, therapy notes,
+and engages in a therapeutic conversation.
 
 Prerequisites:
     - Python 3.10+
     - Google Generative AI API Key set as an environment variable: GEMINI_API_KEY
     - Path to therapy notes directory set as an environment variable: NOTES_DIR_PATH
     - Required libraries installed:
-        pip install google-generativeai PyMuPDF python-dotenv pathlib
+        pip install google-generativeai PyMuPDF python-dotenv pathlib natsort
 
 Setup:
-    1. Create a file named `sysprompt.txt` in the same directory as this script
-       containing the core AI personality and instructions (without user background).
-    2. Create a file named `background.txt` in the same directory, containing
-       the specific background information about the user.
-    3. Create a `.env` file in the same directory (optional, for local development)
-       and add your environment variables:
+    1. Create `sysprompt.txt` (core AI instructions).
+    2. Create `background.txt` (user background info).
+    3. Create `.env` file (optional) or set environment variables:
        GEMINI_API_KEY='YOUR_API_KEY'
        NOTES_DIR_PATH='/full/path/to/your/notes'
-    4. Alternatively, set the `GEMINI_API_KEY` and `NOTES_DIR_PATH` environment
-       variables directly in your system.
-       Example (Linux/macOS): export GEMINI_API_KEY='YOUR_API_KEY'
-       Example (Linux/macOS): export NOTES_DIR_PATH='/path/to/your/notes'
-       Example (Windows CMD): set GEMINI_API_KEY=YOUR_API_KEY
-       Example (Windows CMD): set NOTES_DIR_PATH=C:\path\to\your\notes
-       Example (Windows PowerShell): $env:GEMINI_API_KEY='YOUR_API_KEY'
-       Example (Windows PowerShell): $env:NOTES_DIR_PATH='C:\path\to\your\notes'
-    5. Ensure the directory specified by NOTES_DIR_PATH exists.
+    4. Ensure the notes directory exists.
 
 Execution:
-    python therapist.py
+    python your_script_name.py
 """
 
 import os
@@ -44,28 +33,39 @@ import fitz  # PyMuPDF
 import google.api_core.exceptions
 import google.generativeai as genai
 from dotenv import load_dotenv
+from natsort import natsorted  # Import natsorted
 
 # Load environment variables from .env file, if it exists
 load_dotenv()
 
 # --- Constants ---
-# Retrieve notes directory path from environment variable
-NOTES_DIR_PATH_STR = os.environ.get("NOTES_DIR_PATH")
-# Convert to Path object if the environment variable is set
-NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 
-# System prompt file
+NOTES_DIR_PATH_STR = os.environ.get("NOTES_DIR_PATH")
+NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 SYS_PROMPT_FILE = Path("sysprompt.txt")
-# User background information file
 BACKGROUND_FILE = Path("background.txt")
-# Google AI API Key (Loaded from environment variable)
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Define the model name as a constant
+# Warning: 'gemini-2.5-pro-exp-03-25' might be experimental. Use 'gemini-pro' or 'gemini-1.5-pro-latest' if issues arise.
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
+# --- Safety Settings (Example - Adjust as needed) ---
+SAFETY_SETTINGS = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+    },
+]
 
 # --- Function Definitions ---
+
+
 def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
     """
     Loads text content from a specified file.
@@ -84,23 +84,27 @@ def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
         The content of the file as a string, or None if the file cannot be read.
 
     """
+
     try:
         #
         fileContent = filePath.read_text(encoding="utf-8")
         #
         print(f"Successfully loaded {fileDescription} from: {filePath}")
+
         #
         return fileContent
 
     except FileNotFoundError:
         #
         print(f"Error: {fileDescription.capitalize()} file not found at {filePath}")
+
         #
         return None
 
     except IOError as e:
         #
         print(f"Error reading {fileDescription} file {filePath}: {e}")
+
         #
         return None
 
@@ -123,13 +127,12 @@ def LoadTherapyNotes(directory: Path | None) -> str:
         doesn't exist, no PDFs are found, or no text is extracted.
 
     """
+
     #
     if directory is None:
         #
-        print(
-            "Info: NOTES_DIR_PATH environment variable not set. "
-            "Proceeding without therapy notes history."
-        )
+        print("Info: NOTES_DIR_PATH env var not set. No therapy notes loaded.")
+
         #
         return ""
 
@@ -137,355 +140,223 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     if not directory.is_dir():
         #
         print(
-            f"Error: Therapy notes directory not found or is not a directory: {directory}. "
-            "Proceeding without therapy notes history."
+            f"Error: Notes directory not found/invalid: {directory}. No notes loaded."
         )
+
         #
-        return ""  # Return empty string if directory is invalid
+        return ""
 
     #
     notesTexts = []
-    # Sort files for consistent order (optional but good practice)
-    pdfFiles = sorted(list(directory.glob("*.pdf")))
+    # Use natsorted for natural sorting (e.g., file2.pdf before file10.pdf)
+    pdfFiles = natsorted(list(directory.glob("*.pdf")))
 
     #
     if not pdfFiles:
         #
         print(f"Info: No PDF files found in {directory}.")
+
         #
-        return ""  # Return empty string if no PDFs found
+        return ""
 
     #
     print(f"Found {len(pdfFiles)} PDF files in {directory}. Processing...")
+    #
+    processed_count = 0
 
     #
     for pdfPath in pdfFiles:
         #
         print(f"  Processing: {pdfPath.name}...")
+
         #
         try:
             #
-            # Ensure file exists before opening
             if not pdfPath.is_file():
-                print(f"  Warning: Skipping {pdfPath.name} as it's not a valid file.")
+                #
+                print(f"  Warning: Skipping {pdfPath.name}, not a valid file.")
                 continue
 
             #
             doc = fitz.open(pdfPath)
-            #
-            pdfText = ""
-            #
-            for pageNum, page in enumerate(doc.pages(), start=1):
-                #
-                pageText = page.get_text("text")
-                if pageText:  # Only append if text was extracted
-                    pdfText += pageText
-                # Optional: Add a page break indicator for very long docs
-                # if pageText: pdfText += f"\n--- Page {pageNum} End ---\n"
-            #
+            pdfText = "".join(
+                page.get_text("text") for page in doc.pages() if page.get_text("text")
+            )
             doc.close()
+
             #
             pdfTextStripped = pdfText.strip()
+
+            #
             if pdfTextStripped:
                 #
                 notesTexts.append(
-                    f"--- Start of Notes from {pdfPath.name} ---\n{pdfTextStripped}\n"
-                    f"--- End of Notes from {pdfPath.name} ---"
+                    f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
                 )
-                #
                 print(f"  Successfully extracted text from {pdfPath.name}.")
+                processed_count += 1
+            #
             else:
                 #
                 print(f"  Warning: No text extracted from {pdfPath.name}.")
 
-        except fitz.errors.FileDataError:  # More specific error for corrupt PDFs
-            print(
-                f"  Error: Could not process PDF file {pdfPath.name}. It might be corrupted or password-protected."
-            )
+        except fitz.errors.FileDataError:
+            #
+            print(f"  Error: Corrupt/password-protected PDF: {pdfPath.name}.")
+        #
         except Exception as e:
             #
-            print(f"  Error processing PDF file {pdfPath.name}: {e}")
-            # Continue to the next file
+            print(f"  Error processing PDF {pdfPath.name}: {e}")
 
     #
     if not notesTexts:
         #
-        print("Warning: Could not extract text from any valid PDF files found.")
+        print("Warning: Could not extract text from any valid PDF files.")
+
         #
         return ""
 
     #
+    print(f"Successfully combined therapy notes from {processed_count} PDF(s).")
+
+    #
     # Combine all extracted notes into a single string
     combinedNotes = "\n\n".join(notesTexts)
-    #
-    print(f"Successfully combined therapy notes from {len(notesTexts)} PDF(s).")
+
     #
     return combinedNotes
 
 
-def GenerateAiResponse(prompt: str, apiKey: str) -> str | None:
-    """
-    Sends the prompt to the Google AI API and returns the response.
-
-    Handles API configuration and potential errors during generation.
-
-    Parameters
-    ----------
-    prompt : str
-        The complete prompt to send to the AI model, including system
-        instructions, background, notes, and user input.
-    apiKey : str
-        The Google AI API key.
-
-    Returns
-    -------
-    str | None
-        The generated text response from the AI model, or None if an
-        error occurred or the API key is missing.
-
-    """
-    #
-    if not apiKey:
-        #
-        print("Error: GEMINI_API_KEY environment variable not set.")
-        #
-        return None
-
-    #
-    try:
-        #
-        # Configure the API client
-        genai.configure(api_key=apiKey)
-
-        #
-        # Choose the model using the constant
-        model = genai.GenerativeModel(MODEL_NAME)
-        # Log which model is being used (consider removing in production)
-        # print(f"Using model: {MODEL_NAME}")
-
-        #
-        # --- Safety Settings (Example - Adjust as needed) ---
-        safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE",
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE",
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE",
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE",
-            },
-        ]
-
-        #
-        # Generate content
-        response = model.generate_content(prompt, safety_settings=safety_settings)
-
-        # --- Process Response ---
-        # Check for blocked prompt or response
-        if not response.parts:
-            #
-            block_reason = "Unknown"
-            # Check if prompt_feedback exists and has block_reason
-            if (
-                hasattr(response, "prompt_feedback")
-                and response.prompt_feedback.block_reason
-            ):
-                block_reason = (
-                    response.prompt_feedback.block_reason.name
-                )  # Use .name for enum
-            # Check if finish_reason exists (alternative way blocking might be indicated)
-            elif (
-                hasattr(response, "candidates")
-                and response.candidates
-                and response.candidates[0].finish_reason.name != "STOP"
-            ):
-                block_reason = (
-                    f"Finish Reason: {response.candidates[0].finish_reason.name}"
-                )
-
-            #
-            print(
-                f"\nWarning: AI response was empty or blocked. Reason: {block_reason}"
-            )
-            # Provide a safe default response
-            return (
-                "I apologize, but I encountered an issue or the content was blocked "
-                "by safety filters. Could you please rephrase or try a different topic?"
-            )
-
-        #
-        # Return the generated text
-        return response.text
-
-    # --- Specific Google API Error Handling ---
-    except (
-        google.api_core.exceptions.PermissionDenied
-    ) as e:  # Now 'google' is defined via import
-        print(
-            f"\nAPI Error: Permission Denied. Check if the API key is valid, has access to "
-            f"the model '{MODEL_NAME}', and the Gemini API is enabled in your Google Cloud project. Details: {e}"
-        )
-        return None
-    except (
-        google.api_core.exceptions.NotFound
-    ) as e:  # Now 'google' is defined via import
-        print(
-            f"\nAPI Error: Model Not Found. The model name '{MODEL_NAME}' might be incorrect "
-            f"or unavailable for your key. Details: {e}"
-        )
-        return None
-    except google.api_core.exceptions.ResourceExhausted as e:
-        print(
-            f"\nAPI Error: Quota Exceeded. You may have hit API rate limits or usage quotas. Details: {e}"
-        )
-        return None
-    except google.api_core.exceptions.InvalidArgument as e:
-        print(
-            f"\nAPI Error: Invalid Argument. Often related to prompt content or structure. Details: {e}"
-        )
-        # You might want to log the prompt here for debugging (beware of sensitive data)
-        # print(f"Problematic Prompt (last 100 chars): ...{prompt[-100:]}")
-        return None
-    # --- General Exception Handling ---
-    except Exception as e:
-        #
-        # Catch other potential API errors or unexpected issues
-        print(f"\nError during AI response generation: {e}")
-        print(
-            "Check API key, internet connection, model name, quota limits, and prompt content."
-        )
-        #
-        return None
-
-
 def main():
     """
-    Main function to run the AI Therapist application.
-
-    Loads prompts, background, notes, handles the conversation loop, and interacts with the AI API.
+    Main function to run the AI Therapist application with multi-turn chat.
     """
+
     print("--- AI Therapist Initializing ---")
 
     # --- Validate Environment Variables ---
-    #
-    if not NOTES_DIR:
-        print("Warning: 'NOTES_DIR_PATH' environment variable not set or invalid.")
-        # Continue without notes, LoadTherapyNotes will handle the None value.
+
     #
     if not API_KEY:
         #
-        print("\nFatal Error: GEMINI_API_KEY environment variable is not set.")
+        print("\nFatal Error: GEMINI_API_KEY environment variable not set.")
         print("Please set the environment variable (or use a .env file) and restart.")
+
         #
         return
 
-    # --- Load Core AI Prompt ---
+    #
+    if not NOTES_DIR_PATH_STR:  # Check if the path string was retrieved
+        #
+        print("Warning: 'NOTES_DIR_PATH' environment variable not set or invalid.")
+        # NOTES_DIR will be None, LoadTherapyNotes handles this.
+
+    # --- Load Static Context ---
+
     #
     baseSystemPrompt = LoadTextFile(SYS_PROMPT_FILE, "system prompt")
+
     #
     if baseSystemPrompt is None:
         #
         print("Fatal Error: Could not load system prompt. Exiting.")
-        #
-        return  # Exit if system prompt is essential
 
-    # --- Load User Background ---
+        #
+        return
+
     #
     userBackground = LoadTextFile(BACKGROUND_FILE, "user background")
+
     #
     if userBackground is None:
         #
-        print("Warning: Could not load user background file. Proceeding without it.")
-        userBackground = (
-            "No user background information was loaded."  # Provide default fallback
-        )
-
-    # --- Load Therapy Notes ---
-    #
-    therapyNotesText = LoadTherapyNotes(NOTES_DIR)
-    # therapyNotesText will be an empty string if dir invalid, no PDFs, or no text extracted
-
-    # --- Construct the Full System Context for the AI ---
-    #
-    # Start with the core AI instructions
-    fullSystemContext = baseSystemPrompt
+        print("Warning: Could not load user background file. Using fallback.")
+        userBackground = "No user background information was loaded."
 
     #
-    # Append the user background information
-    fullSystemContext += (
-        "\n\n"
-        "--- USER BACKGROUND INFORMATION ---\n"
-        "This section contains important background information about the user you are "
-        "interacting with. Use this information to personalize your responses and "
-        "understand their context.\n\n"
+    therapyNotesText = LoadTherapyNotes(NOTES_DIR)  # Handles None NOTES_DIR
+
+    # --- Construct the SINGLE System Instruction ---
+    # Combine all static context into one block for the model's system instruction
+
+    #
+    system_instruction_parts = [baseSystemPrompt]
+
+    #
+    system_instruction_parts.append(
+        "\n\n--- USER BACKGROUND INFORMATION ---\n"
+        "Use this information to personalize responses and understand context.\n\n"
         f"{userBackground}\n\n"
         "--- END USER BACKGROUND INFORMATION ---"
     )
 
     #
-    # Append therapy notes history, if available
     if therapyNotesText:
         #
-        fullSystemContext += (
-            "\n\n"
-            "--- BEGIN THERAPY NOTES HISTORY ---\n"
-            "The following are notes from the user's previous therapy sessions. Use this "
-            "history in conjunction with the background information to inform your "
-            "responses. Therapy notes reflect recent developments. If there are contradictions "
-            "between the general background and the therapy notes, prioritize the "
-            "information in the therapy notes as they are more current.\n\n"
+        system_instruction_parts.append(
+            "\n\n--- BEGIN THERAPY NOTES HISTORY ---\n"
+            "Use these notes (prioritizing over background if conflicting) for context.\n\n"
             f"{therapyNotesText}\n\n"
             "--- END THERAPY NOTES HISTORY ---"
         )
+    #
     else:
         #
-        fullSystemContext += (
-            "\n\n"
-            "--- THERAPY NOTES HISTORY ---\n"
-            "No therapy notes were loaded or found. Base your responses primarily "
-            "on the user background information provided above and the ongoing "
-            "conversation."
+        system_instruction_parts.append(
+            "\n\n--- THERAPY NOTES HISTORY ---\n"
+            "No therapy notes loaded. Base responses on background and conversation."
             "\n--- END THERAPY NOTES HISTORY ---"
         )
 
-    # --- Add Ethical Guidelines Reminder ---
     #
-    fullSystemContext += (
+    # Append Ethical Guidelines Reminder
+    system_instruction_parts.append(
         "\n\n--- IMPORTANT REMINDERS ---\n"
-        "1. Role: You are an AI assistant for supportive conversation, NOT a licensed "
-        "therapist or medical professional. Do not provide diagnoses or treatment plans.\n"
-        "2. Ethics: Adhere strictly to the ethical guidelines and personality defined in "
-        "your initial system prompt.\n"
-        "3. Crisis: If the user mentions self-harm, suicide, or abuse, respond empathetically, "
-        "urge them to seek immediate professional help, and provide crisis resources "
-        "(e.g., 988 Suicide & Crisis Lifeline in the US). Do not attempt to manage a crisis "
-        "yourself.\n"
-        "4. Context: Continuously refer to the User Background and Therapy Notes provided "
-        "to maintain relevant and personalized conversation.\n"
+        "1. Role: AI assistant, NOT licensed therapist. No diagnoses/treatment.\n"
+        "2. Ethics: Adhere to initial system prompt guidelines.\n"
+        "3. Crisis: If user mentions self-harm/suicide/abuse, respond empathetically, "
+        "urge professional help, provide crisis resources (e.g., 988 US). Do not manage crisis.\n"
+        "4. Context: Refer to User Background/Therapy Notes.\n"
         "--- END IMPORTANT REMINDERS ---"
     )
 
-    # --- Start Conversation Loop ---
     #
-    print("\n--- AI Therapist Ready ---")
-    print(f"Model: {MODEL_NAME}")
-    print("Type 'quit' or 'exit' to end the session.")
-    print(
-        "Disclaimer: This AI is for supportive conversation and is not a substitute "
-        "for professional therapy or medical advice."
-    )
+    combined_system_instruction = "".join(system_instruction_parts)
+
+    # --- Initialize Google AI ---
 
     #
-    # Initialize conversation history (optional, but good for context window management if needed later)
-    # conversation_history = [] # Example: list of {'role': 'user'/'model', 'parts': [text]}
+    try:
+        #
+        genai.configure(api_key=API_KEY)
+
+        #
+        # Create the model with the combined system instruction
+        model = genai.GenerativeModel(
+            MODEL_NAME,
+            safety_settings=SAFETY_SETTINGS,
+            system_instruction=combined_system_instruction,
+        )
+
+        #
+        # Start a chat session (history is managed internally)
+        chat = model.start_chat(history=[])  # Start with empty user/model turn history
+
+        #
+        print("\n--- AI Therapist Ready ---")
+        print(f"Model: {MODEL_NAME}")
+        print("Type 'quit' or 'exit' to end the session.")
+        print("Disclaimer: AI for support, not professional therapy/medical advice.")
+
+    except Exception as e:
+        #
+        print(f"\nFatal Error during AI Initialization: {e}")
+        print("Check API key, model name, and network connection.")
+
+        #
+        return
+
+    # --- Conversation Loop ---
 
     #
     try:
@@ -495,10 +366,16 @@ def main():
             # Get user input
             try:
                 #
-                userInput = input("\nYou: ")
-            except EOFError:  # Handle Ctrl+D
+                userInput = input("\nYou: ").strip()
+
                 #
-                print("\nAI Therapist: Ending session due to input closure. Take care.")
+                if not userInput:  # Handle empty input
+                    continue
+
+            except EOFError:
+                #
+                print("\nAI Therapist: Input stream closed. Ending session.")
+
                 #
                 break
 
@@ -506,53 +383,120 @@ def main():
             # Check for exit command
             if userInput.lower() in ["quit", "exit"]:
                 #
-                print("\nAI Therapist: Ending session. Take care.")
+                print("\nAI Therapist: Ending session as requested. Take care.")
+
                 #
                 break
 
-            #
-            # Construct the full prompt for this turn
-            # This includes the static context plus the latest user message
-            # For very long conversations, context window management might be needed
-            # (e.g., summarizing earlier parts), but for now, send the full context.
-            currentPrompt = f"{fullSystemContext}\n\nUser: {userInput}\n\nAI Therapist:"
-
-            # --- Generate AI Response ---
-            #
-            print("\nAI Therapist: (Thinking...)")  # Thinking indicator
-            #
-            aiResponse = GenerateAiResponse(currentPrompt, API_KEY)
+            # --- Send Message and Get Response ---
 
             #
-            # Print the response or error message
-            if aiResponse:
+            print("\nAI Therapist: (Thinking...)")
+
+            #
+            try:
                 #
-                print(f"\nAI Therapist: {aiResponse}")
-                # Optional: Add user input and AI response to history
-                # conversation_history.append({'role': 'user', 'parts': [userInput]})
-                # conversation_history.append({'role': 'model', 'parts': [aiResponse]})
-            else:
+                # Send message - chat history is automatically updated by the object
+                response = chat.send_message(userInput)
+
+                # --- Process Response ---
+                # Check for blocked content or other issues
+
                 #
-                # Error messages are printed within GenerateAiResponse
+                if not response.parts:
+                    #
+                    block_reason = "Unknown"
+
+                    #
+                    if (
+                        hasattr(response, "prompt_feedback")
+                        and response.prompt_feedback.block_reason
+                    ):
+                        #
+                        block_reason = (
+                            response.prompt_feedback.block_reason.name
+                        )  # Use .name for enum
+                    #
+                    elif (
+                        hasattr(response, "candidates")
+                        and response.candidates
+                        and response.candidates[0].finish_reason.name != "STOP"
+                    ):
+                        #
+                        block_reason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
+
+                    #
+                    print(
+                        f"\nWarning: AI response empty/blocked. Reason: {block_reason}"
+                    )
+                    aiResponseText = (
+                        "I apologize, but I encountered an issue or the content was blocked. "
+                        "Could you rephrase or try a different topic?"
+                    )
+                #
+                else:
+                    #
+                    aiResponseText = response.text
+
+                #
+                # Print the AI's response
+                print(f"\nAI Therapist: {aiResponseText}")
+
+            # --- API Error Handling within the loop ---
+            except google.api_core.exceptions.PermissionDenied as e:
+                #
                 print(
-                    "\nAI Therapist: I encountered an issue generating a response. "
-                    "Please check the console logs for details and try again."
+                    f"\nAPI Error: Permission Denied. Check API key/model access. Details: {e}"
                 )
-                # Consider adding a retry mechanism or specific guidance based on error type
+                # Decide whether to break or allow retry
+                # break
+            #
+            except google.api_core.exceptions.NotFound as e:
+                #
+                print(
+                    f"\nAPI Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
+                )
 
+                #
+                break  # Likely fatal for this session
+            #
+            except google.api_core.exceptions.ResourceExhausted as e:
+                #
+                print(f"\nAPI Error: Quota Exceeded. Details: {e}")
+                # Maybe wait and retry, or break
+
+                #
+                break
+            #
+            except google.api_core.exceptions.InvalidArgument as e:
+                #
+                print(
+                    f"\nAPI Error: Invalid Argument (check prompt/content). Details: {e}"
+                )
+                # Log problematic input if needed (beware sensitive data)
+                # print(f"Input causing error: {userInput}")
+            #
+            except Exception as e:
+                #
+                print(f"\nError during AI response generation: {e}")
+                # General error, maybe allow user to try again
+
+    # --- General Error Handling & Cleanup ---
     except KeyboardInterrupt:
         #
         print("\n\nAI Therapist: Session interrupted by user. Goodbye.")
+    #
     except Exception as e:
         #
-        # Catch unexpected errors in the main loop itself
-        print(f"\nAn unexpected error occurred outside of API generation: {e}")
+        print(f"\nAn unexpected error occurred in the main loop: {e}")
+    #
     finally:
         #
         print("\n--- AI Therapist Session Ended ---")
 
 
 # --- Main Execution ---
+
 #
 if __name__ == "__main__":
     #
