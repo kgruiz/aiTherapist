@@ -3,3 +3,7 @@
 
 # Exception for the system prompt configuration.
 !sysprompt.txt
+# Ignore patterns added by AI Therapist script
+.env
+background.txt
+history/

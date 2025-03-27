@@ -5,7 +5,8 @@ AI Therapist Application using Google Generative AI (Multi-Turn Chat).
 This script implements a conversational AI therapist that uses Google's
 Generative AI API (e.g., Gemini) and maintains conversation history within
 a single session. It loads a system prompt, user background, therapy notes,
-implements rate limiting, and engages in a therapeutic conversation.
+implements rate limiting, logs chat sessions, ensures .gitignore rules,
+and engages in a therapeutic conversation.
 
 Prerequisites:
     - Python 3.10+
@@ -21,13 +22,16 @@ Setup:
        GEMINI_API_KEY='YOUR_API_KEY'
        NOTES_DIR_PATH='/full/path/to/your/notes'
     4. Ensure the notes directory exists.
+    5. A 'history' directory will be created automatically for chat logs.
+    6. A '.gitignore' file will be checked/created to ignore sensitive files.
 
 Execution:
     python your_script_name.py
 """
 
+import datetime  # For logging filenames
 import os
-import time  # For rate limiting
+import time  # For rate limiting and logging
 from collections import deque  # For rate limiting timestamp tracking
 from pathlib import Path
 
@@ -41,10 +45,13 @@ from natsort import natsorted  # Import natsorted
 load_dotenv()
 
 # --- Constants ---
+
 NOTES_DIR_PATH_STR = os.environ.get("NOTES_DIR_PATH")
 NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 SYS_PROMPT_FILE = Path("sysprompt.txt")
-BACKGROUND_FILE = Path("background.txt")
+BACKGROUND_FILE = Path("background.txt")  # File to be ignored by git
+HISTORY_DIR = Path("history")  # Directory to store chat logs, to be ignored by git
+GITIGNORE_FILE = Path(".gitignore")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
@@ -67,6 +74,98 @@ SAFETY_SETTINGS = [
 ]
 
 # --- Function Definitions ---
+
+
+def EnsureGitignore():
+    """
+    Checks if .gitignore exists and ensures specific files/directories are ignored.
+
+    Creates .gitignore if it doesn't exist. Appends necessary ignore rules
+    for sensitive files like background info and chat history.
+    """
+
+    ignorePatterns = {
+        BACKGROUND_FILE.name,  # e.g., "background.txt"
+        f"{HISTORY_DIR.name}/",  # e.g., "history/" - trailing slash for directory
+        ".env",  # Ignore environment file
+    }
+    patternsToAdd = set()
+    needsUpdate = False
+
+    #
+    print(f"Checking {GITIGNORE_FILE} for necessary ignore patterns...")
+
+    #
+    try:
+        #
+        if GITIGNORE_FILE.is_file():
+            #
+            # Read existing patterns
+            with open(GITIGNORE_FILE, "r", encoding="utf-8") as f:
+                #
+                existingPatterns = {
+                    line.strip()
+                    for line in f
+                    if line.strip() and not line.strip().startswith("#")
+                }
+
+            #
+            # Determine which patterns are missing
+            patternsToAdd = ignorePatterns - existingPatterns
+
+            #
+            if patternsToAdd:
+                #
+                needsUpdate = True
+                print(
+                    f"  Will add missing patterns to {GITIGNORE_FILE}: {', '.join(patternsToAdd)}"
+                )
+        #
+        else:
+            #
+            # File doesn't exist, need to create it and add all patterns
+            needsUpdate = True
+            patternsToAdd = ignorePatterns
+            print(
+                f"  {GITIGNORE_FILE} not found. Will create it with required patterns."
+            )
+
+        #
+        # If updates are needed, append to or create the file
+        if needsUpdate:
+            #
+            with open(GITIGNORE_FILE, "a", encoding="utf-8") as f:
+                #
+                # Add a header if the file is newly created or being added to significantly
+                if (
+                    not GITIGNORE_FILE.exists() or patternsToAdd == ignorePatterns
+                ):  # Crude check if file was just created
+                    f.write("\n# Ignore patterns added by AI Therapist script\n")
+                elif (
+                    patternsToAdd
+                ):  # Only add header if adding something new to existing file
+                    f.write("\n# Added by AI Therapist script\n")
+
+                #
+                for pattern in sorted(list(patternsToAdd)):  # Sort for consistent order
+                    #
+                    f.write(f"{pattern}\n")
+            #
+            print(f"  {GITIGNORE_FILE} updated successfully.")
+        #
+        else:
+            #
+            print(f"  {GITIGNORE_FILE} already contains the necessary patterns.")
+
+    except IOError as e:
+        #
+        print(f"Error accessing or modifying {GITIGNORE_FILE}: {e}")
+        print("  Skipping .gitignore check/update.")
+    #
+    except Exception as e:
+        #
+        print(f"An unexpected error occurred during .gitignore check: {e}")
+        print("  Skipping .gitignore check/update.")
 
 
 def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
@@ -232,12 +331,15 @@ def LoadTherapyNotes(directory: Path | None) -> str:
 
 def main():
     """
-    Main function to run the AI Therapist application with multi-turn chat.
+    Main function to run the AI Therapist application with multi-turn chat and logging.
     """
 
     print("--- AI Therapist Initializing ---")
 
-    # --- Validate Environment Variables ---
+    # --- Ensure Gitignore Rules ---
+    EnsureGitignore()  # Check/update .gitignore before proceeding
+
+    # --- Validate Environment Variables & Setup History Dir ---
 
     #
     if not API_KEY:
@@ -254,6 +356,38 @@ def main():
         print("Warning: 'NOTES_DIR_PATH' environment variable not set or invalid.")
         # NOTES_DIR will be None, LoadTherapyNotes handles this.
 
+    #
+    # Create history directory if it doesn't exist
+    logFile = None  # Initialize logFile to None
+    logFilename = None  # Initialize logFilename to None
+    #
+    try:
+        #
+        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    #
+    except OSError as e:
+        #
+        print(f"Error creating history directory {HISTORY_DIR}: {e}")
+        # Decide if this is fatal or just proceed without logging
+        print("Proceeding without chat logging.")
+        # logFile remains None
+    #
+    else:
+        # --- Setup Logging ---
+        # Generate a unique filename for this session's log
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        logFilename = HISTORY_DIR / f"chat_log_{timestamp}.txt"
+        print(f"Logging chat session to: {logFilename}")
+        # Open the log file in append mode, using 'utf-8' encoding
+        try:
+            #
+            logFile = open(logFilename, "a", encoding="utf-8")
+        #
+        except IOError as e:
+            #
+            print(f"Error opening log file {logFilename}: {e}")
+            logFile = None  # Ensure logFile is None if opening fails
+
     # --- Load Static Context ---
 
     #
@@ -263,6 +397,8 @@ def main():
     if baseSystemPrompt is None:
         #
         print("Fatal Error: Could not load system prompt. Exiting.")
+        if logFile:
+            logFile.close()  # Close log file if open
 
         #
         return
@@ -326,6 +462,17 @@ def main():
     #
     combinedSystemInstruction = "".join(systemInstructionParts)
 
+    # --- Log Initial Context (Optional) ---
+    if logFile:
+        #
+        logFile.write(f"--- Session Start: {timestamp} ---\n")
+        logFile.write(f"Model: {MODEL_NAME}\n")
+        logFile.write(f"Rate Limit: {REQUESTS_PER_MINUTE}/min\n")
+        logFile.write("--- System Instruction Sent to Model ---\n")
+        logFile.write(combinedSystemInstruction)
+        logFile.write("\n--- End System Instruction ---\n\n")
+        logFile.flush()  # Ensure initial info is written
+
     # --- Initialize Google AI ---
 
     #
@@ -354,8 +501,12 @@ def main():
 
     except Exception as e:
         #
-        print(f"\nFatal Error during AI Initialization: {e}")
-        print("Check API key, model name, and network connection.")
+        errorMsg = f"\nFatal Error during AI Initialization: {e}\nCheck API key, model name, and network connection."
+        print(errorMsg)
+        if logFile:
+            #
+            logFile.write(errorMsg + "\n--- SESSION ENDED DUE TO INIT ERROR ---\n")
+            logFile.close()
 
         #
         return
@@ -366,7 +517,7 @@ def main():
     messageTimestamps = deque()
 
     #
-    try:
+    try:  # Main loop try block
         #
         while True:
             #
@@ -382,6 +533,8 @@ def main():
             except EOFError:
                 #
                 print("\nAI Therapist: Input stream closed. Ending session.")
+                if logFile:
+                    logFile.write("\n--- Input stream closed by user ---\n")
 
                 #
                 break
@@ -391,9 +544,21 @@ def main():
             if userInput.lower() in ["quit", "exit"]:
                 #
                 print("\nAI Therapist: Ending session as requested. Take care.")
+                if logFile:
+                    logFile.write(
+                        "\n--- Session ended by user command ('quit'/'exit') ---\n"
+                    )
 
                 #
                 break
+
+            # --- Log User Input ---
+            if logFile:
+                #
+                logFile.write(
+                    f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] You: {userInput}\n"
+                )
+                logFile.flush()
 
             # --- Rate Limiting Check ---
 
@@ -412,22 +577,32 @@ def main():
                 timeSinceOldest = currentTime - messageTimestamps[0]
                 # Calculate time needed to wait until the oldest message is > 60s old
                 waitTime = 60 - timeSinceOldest + 0.1  # Add small buffer
-
-                #
-                print(
+                waitMsg = (
                     f"\nRate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
                 )
+
+                #
+                print(waitMsg)
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {waitMsg.strip()}\n"
+                    )
 
                 #
                 # Display countdown timer
                 for i in range(int(waitTime), 0, -1):
                     #
-                    print(f"  Next message available in {i} seconds...   \r", end="")
+                    countdownMsg = f"  Next message available in {i} seconds...   \r"
+                    print(countdownMsg, end="")
+                    # Optionally log countdown start/end
+                    # if i == int(waitTime) and logFile: logFile.write(f"  (Rate limit wait started: {waitTime:.1f}s)\n")
                     time.sleep(1)
 
                 #
                 print(" " * 50 + "\r", end="")  # Clear the countdown line
                 time.sleep(waitTime % 1)  # Sleep for remaining fraction of a second
+                if logFile:
+                    logFile.write(f"  (Rate limit wait finished)\n")
 
                 #
                 # Update current time after waiting
@@ -441,6 +616,7 @@ def main():
 
             #
             print("\nAI Therapist: (Thinking...)")
+            aiResponseText = None  # Initialize in case of error before assignment
 
             #
             try:
@@ -479,13 +655,19 @@ def main():
                         blockReason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
 
                     #
-                    print(
+                    warningMsg = (
                         f"\nWarning: AI response empty/blocked. Reason: {blockReason}"
                     )
+                    print(warningMsg)
                     aiResponseText = (
                         "I apologize, but I encountered an issue or the content was blocked. "
                         "Could you rephrase or try a different topic?"
                     )
+                    if logFile:
+                        logFile.write(
+                            f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System:{warningMsg}\n"
+                        )
+
                 #
                 else:
                     #
@@ -495,67 +677,107 @@ def main():
                 # Print the AI's response
                 print(f"\nAI Therapist: {aiResponseText}")
 
+                # --- Log AI Response ---
+                if logFile:
+                    #
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] AI Therapist: {aiResponseText}\n"
+                    )
+                    logFile.flush()
+
             # --- API Error Handling within the loop ---
             except google.api_core.exceptions.PermissionDenied as e:
                 #
-                print(
-                    f"\nAPI Error: Permission Denied. Check API key/model access. Details: {e}"
-                )
+                errorMsg = f"\nAPI Error: Permission Denied. Check API key/model access. Details: {e}"
+                print(errorMsg)
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                    )
                 # Decide whether to break or allow retry
                 # break
             #
             except google.api_core.exceptions.NotFound as e:
                 #
-                print(
-                    f"\nAPI Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
-                )
+                errorMsg = f"\nAPI Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
+                print(errorMsg)
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                    )
 
                 #
                 break  # Likely fatal for this session
             #
             except google.api_core.exceptions.ResourceExhausted as e:
                 #
-                print(f"\nAPI Error: Quota Exceeded. Details: {e}")
-                # Maybe wait and retry, or break
-
+                errorMsg = f"\nAPI Error: Quota Exceeded. Details: {e}"
+                print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                    )
 
                 #
                 break
             #
             except google.api_core.exceptions.InvalidArgument as e:
                 #
-                print(
-                    f"\nAPI Error: Invalid Argument (check prompt/content). Details: {e}"
-                )
-                # Log problematic input if needed (beware sensitive data)
-                # print(f"Input causing error: {userInput}")
-
+                errorMsg = f"\nAPI Error: Invalid Argument (check prompt/content). Details: {e}"
+                print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                    )
+                # Log problematic input if needed (beware sensitive data)
+                # if logFile: logFile.write(f"Input causing error: {userInput}\n")
             #
             except Exception as e:
                 #
-                print(f"\nError during AI response generation: {e}")
-                # General error, maybe allow user to try again
-
+                errorMsg = f"\nError during AI response generation: {e}"
+                print(errorMsg)
                 # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
+                if logFile:
+                    logFile.write(
+                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error:{errorMsg}\n"
+                    )
+                # General error, maybe allow user to try again
 
     # --- General Error Handling & Cleanup ---
     except KeyboardInterrupt:
         #
         print("\n\nAI Therapist: Session interrupted by user. Goodbye.")
+        if logFile:
+            logFile.write("\n--- Session interrupted by user (KeyboardInterrupt) ---\n")
     #
     except Exception as e:
         #
-        print(f"\nAn unexpected error occurred in the main loop: {e}")
+        errorMsg = f"\nAn unexpected error occurred in the main loop: {e}"
+        print(errorMsg)
+        if logFile:
+            logFile.write(
+                f"\n{errorMsg}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
+            )
     #
     finally:
+        #
+        # Ensure the log file is closed properly
+        if logFile:
+            #
+            logFile.write(
+                f"\n--- Session End: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n"
+            )
+            logFile.close()
+            if logFilename:  # Check if logFilename was set
+                print(f"Chat log saved to: {logFilename}")
         #
         print("\n--- AI Therapist Session Ended ---")
 
