@@ -77,7 +77,9 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
 # Rate Limiting: Maximum number of requests allowed per minute
-REQUESTS_PER_MINUTE = 2  # Adjusted from user's code
+REQUESTS_PER_MINUTE = 5
+
+# TODO: 2.5 Pro daily limit is 25. Keep track?
 
 # Timestamp format for detailed log entries (user/AI messages)
 LOG_DETAIL_TIMESTAMP_FORMAT = "%Y-%m-%d %A %H:%M:%S"
