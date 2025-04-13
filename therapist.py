@@ -4,15 +4,16 @@ AI Therapist Application using Google Generative AI (Multi-Turn Chat).
 This script implements a conversational AI therapist that uses Google's
 Generative AI API (e.g., Gemini) and maintains conversation history within
 a single session. It loads a system prompt, user background, therapy notes,
-implements rate limiting, logs chat sessions, ensures .gitignore rules,
-and engages in a therapeutic conversation with enhanced console output using Rich.
+past conversation logs, implements rate limiting, logs chat sessions,
+ensures .gitignore rules, and engages in a therapeutic conversation
+with enhanced console output using Rich.
 
 Prerequisites:
     - Python 3.10+
     - Google Generative AI API Key set as an environment variable: GEMINI_API_KEY
     - Path to therapy notes directory set as an environment variable: NOTES_DIR_PATH
     - Required libraries installed:
-        pip install google-generativeai PyMuPDF python-dotenv pathlib natsort rich
+        pip install google-generativeai PyMuPDF python-dotenv pathlib natsort rich pytz
 
 Setup:
     1. Create `sysprompt.txt` (core AI instructions).
@@ -21,7 +22,8 @@ Setup:
        GEMINI_API_KEY='YOUR_API_KEY'
        NOTES_DIR_PATH='/full/path/to/your/notes'
     4. Ensure the notes directory exists.
-    5. A 'history' directory will be created automatically for chat logs.
+    5. A 'history' directory containing 'pre_chat_logs' and 'chat_logs' subdirectories
+       will be created automatically for chat logs.
     6. A '.gitignore' file will be checked/created to ignore sensitive files.
 
 Execution:
@@ -66,7 +68,9 @@ NOTES_DIR_PATH_STR = os.environ.get("NOTES_DIR_PATH")
 NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 SYS_PROMPT_FILE = Path("sysprompt.txt")
 BACKGROUND_FILE = Path("background.txt")  # File to be ignored by git
-HISTORY_DIR = Path("history")  # Directory to store chat logs, to be ignored by git
+HISTORY_DIR = Path("history")  # Base directory for logs
+PRE_LOG_SUBDIR = HISTORY_DIR / "pre_chat_logs"  # Subdirectory for pre-chat logs
+CHAT_LOG_SUBDIR = HISTORY_DIR / "chat_logs"  # Subdirectory for chat logs
 GITIGNORE_FILE = Path(".gitignore")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -74,6 +78,11 @@ MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
 # Rate Limiting: Maximum number of requests allowed per minute
 REQUESTS_PER_MINUTE = 2  # Adjusted from user's code
+
+# Timestamp format for detailed log entries (user/AI messages)
+LOG_DETAIL_TIMESTAMP_FORMAT = "%Y-%m-%d %A %H:%M:%S"
+# Timestamp format for log file start/end markers
+LOG_FILE_TIMESTAMP_FORMAT = "%Y-%m-%d %A %H:%M:%S"
 
 # --- Safety Settings (Example - Adjust as needed) ---
 SAFETY_SETTINGS = [
@@ -377,10 +386,94 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     return combinedNotes
 
 
+def LoadPastConversations(chat_log_dir: Path) -> str:
+    """
+    Loads and combines content from previous chat log files.
+
+    Parameters
+    ----------
+    chat_log_dir : Path
+        The path object pointing to the directory containing chat log files.
+
+    Returns
+    -------
+    str
+        A single string containing the combined text from all chat logs,
+        separated by dividers. Returns an empty string if the directory
+        doesn't exist, is empty, or an error occurs.
+    """
+    console.print(
+        f"Loading past conversations from: [cyan]{chat_log_dir}[/]", style="dim"
+    )
+    if not chat_log_dir.is_dir():
+        console.print(
+            f"  [yellow]Info:[/] Chat log directory not found. No past conversations loaded."
+        )
+        return ""
+
+    # Find chat log files, sort them naturally by filename (which includes timestamp)
+    log_files = natsorted(
+        [f for f in chat_log_dir.glob("chat_log_*.txt") if f.is_file()]
+    )
+
+    if not log_files:
+        console.print(
+            f"  [yellow]Info:[/] No past chat logs found in [cyan]{chat_log_dir}[/]."
+        )
+        return ""
+
+    combined_history = []
+    errors_encountered = 0
+    logs_loaded = 0
+
+    console.print(f"  Found {len(log_files)} past chat log(s). Combining...")
+
+    for log_path in log_files:
+        try:
+            log_content = log_path.read_text(encoding="utf-8").strip()
+            if log_content:
+                # Add separators for clarity in the combined context
+                combined_history.append(
+                    f"--- Start Past Conversation: {log_path.name} ---\n"
+                    f"{log_content}\n"
+                    f"--- End Past Conversation: {log_path.name} ---"
+                )
+                logs_loaded += 1
+            else:
+                console.print(f"  [dim]Skipping empty log file: {log_path.name}[/dim]")
+        except IOError as e:
+            console.print(
+                f"  [bold red]Error reading past log file {log_path.name}:[/] {e}"
+            )
+            errors_encountered += 1
+        except Exception as e:
+            console.print(
+                f"  [bold red]Unexpected error processing log file {log_path.name}:[/] {e}"
+            )
+            errors_encountered += 1
+
+    if not combined_history:
+        console.print(
+            "  [yellow]Warning:[/] Could not load content from any past chat logs."
+        )
+        return ""
+
+    summary_color = "green" if errors_encountered == 0 else "yellow"
+    console.print(
+        f"  [{summary_color}]Successfully loaded content from {logs_loaded} past conversation(s).[/]"
+        f"{f' ([red]{errors_encountered} errors[/])' if errors_encountered > 0 else ''}"
+    )
+
+    # Join all loaded histories with double newlines
+    return "\n\n".join(combined_history)
+
+
 def main():
     """
     Main function to run the AI Therapist application with multi-turn chat and logging.
     """
+    start_time = datetime.datetime.now()  # Get start time for log headers
+    formatted_start_time = start_time.strftime(LOG_FILE_TIMESTAMP_FORMAT)
 
     console.print(Rule("[bold cyan]AI Therapist Initializing[/]", style="cyan"))
 
@@ -408,38 +501,51 @@ def main():
         )
         # NOTES_DIR will be None, LoadTherapyNotes handles this.
 
-    # Create history directory if it doesn't exist
-    logFile = None  # Initialize logFile to None
-    logFilename = None  # Initialize logFilename to None
+    # --- Setup Logging ---
+    preLogFile = None  # Initialize pre-log file handle
+    chatLogFile = None  # Initialize chat log file handle
+    preLogFilename = None  # Initialize pre-log filename
+    chatLogFilename = None  # Initialize chat log filename
+    logDirsCreated = False
 
     try:
-
-        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        # Create base history directory and subdirectories
+        PRE_LOG_SUBDIR.mkdir(parents=True, exist_ok=True)
+        CHAT_LOG_SUBDIR.mkdir(parents=True, exist_ok=True)
+        logDirsCreated = True
 
     except OSError as e:
 
         console.print(
-            f"[bold red]Error creating history directory {HISTORY_DIR}:[/] {e}"
+            f"[bold red]Error creating history directories under {HISTORY_DIR}:[/] {e}"
         )
-        # Decide if this is fatal or just proceed without logging
-        console.print("[yellow]Proceeding without chat logging.[/]")
-        # logFile remains None
+        console.print("[yellow]Proceeding without any file logging.[/]")
 
-    else:
-        # --- Setup Logging ---
-        # Generate a unique filename for this session's log
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        logFilename = HISTORY_DIR / f"chat_log_{timestamp}.txt"
-        console.print(f"Logging chat session to: [cyan]{logFilename}[/]")
-        # Open the log file in append mode, using 'utf-8' encoding
+    if logDirsCreated:
+        # Generate unique filenames using the start time's timestamp part
+        timestamp_str = start_time.strftime("%Y-%m-%d_%H-%M-%S")
+        preLogFilename = PRE_LOG_SUBDIR / f"pre_chat_log_{timestamp_str}.txt"
+        chatLogFilename = CHAT_LOG_SUBDIR / f"chat_log_{timestamp_str}.txt"
+
+        console.print(f"Attempting to log pre-chat info to: [cyan]{preLogFilename}[/]")
+        console.print(
+            f"Attempting to log chat conversation to: [cyan]{chatLogFilename}[/]"
+        )
+
+        # Open the pre-log file
         try:
-
-            logFile = open(logFilename, "a", encoding="utf-8")
-
+            preLogFile = open(preLogFilename, "w", encoding="utf-8")
+            # Use formatted start time for the header
+            preLogFile.write(f"--- Pre-Chat Log Start: {formatted_start_time} ---\n")
+            preLogFile.write(f"Model: {MODEL_NAME}\n")
+            preLogFile.write(f"Rate Limit: {REQUESTS_PER_MINUTE}/min\n")
+            preLogFile.flush()
         except IOError as e:
-
-            console.print(f"[bold red]Error opening log file {logFilename}:[/] {e}")
-            logFile = None  # Ensure logFile is None if opening fails
+            console.print(
+                f"[bold red]Error opening pre-log file {preLogFilename}:[/] {e}"
+            )
+            preLogFile = None
+            preLogFilename = None
 
     console.print(Rule("Loading Context", style="dim"))
 
@@ -456,8 +562,9 @@ def main():
                 border_style="red",
             )
         )
-        if logFile:
-            logFile.close()  # Close log file if open
+        if preLogFile:
+            preLogFile.write("\n--- FATAL ERROR: Could not load system prompt. ---\n")
+            preLogFile.close()
 
         return
 
@@ -477,7 +584,6 @@ def main():
         return now.strftime("%A, %I:%M %p %Z on %B %d, %Y")
 
     formattedDateTime = GetFormattedDateTime()
-    # console.print(f"Current Date and Time: [cyan]{formattedDateTime}[/]")
 
     # Add formatted date and time to the base system prompt
     baseSystemPrompt = (
@@ -493,11 +599,12 @@ def main():
         )
         userBackground = "No user background information was loaded."
 
-    therapyNotesText = LoadTherapyNotes(NOTES_DIR)  # Handles None NOTES_DIR
+    therapyNotesText = LoadTherapyNotes(NOTES_DIR)
+
+    # --- Load Past Conversation History ---
+    pastConversationsText = LoadPastConversations(CHAT_LOG_SUBDIR)
 
     # --- Construct the SINGLE System Instruction ---
-    # Combine all static context into one block for the model's system instruction
-
     systemInstructionParts = [baseSystemPrompt]
 
     systemInstructionParts.append(
@@ -508,45 +615,53 @@ def main():
     )
 
     if therapyNotesText:
-
         systemInstructionParts.append(
             "\n\n--- BEGIN THERAPY NOTES HISTORY ---\n"
             "Use these notes (prioritizing over background if conflicting) for context.\n\n"
             f"{therapyNotesText}\n\n"
             "--- END THERAPY NOTES HISTORY ---"
         )
-
     else:
-
         systemInstructionParts.append(
             "\n\n--- THERAPY NOTES HISTORY ---\n"
-            "No therapy notes loaded. Base responses on background and conversation."
+            "No therapy notes loaded."
             "\n--- END THERAPY NOTES HISTORY ---"
         )
 
-    # Append Ethical Guidelines Reminder
+    # Add Past Conversations if loaded
+    if pastConversationsText:
+        systemInstructionParts.append(
+            "\n\n--- BEGIN PAST CONVERSATION HISTORY ---\n"
+            "This section contains logs from previous chat sessions. Use this for long-term context.\n\n"
+            f"{pastConversationsText}\n\n"
+            "--- END PAST CONVERSATION HISTORY ---"
+        )
+    else:
+        systemInstructionParts.append(
+            "\n\n--- PAST CONVERSATION HISTORY ---\n"
+            "No past conversation history loaded."
+            "\n--- END PAST CONVERSATION HISTORY ---"
+        )
+
+    # Append Ethical Guidelines Reminder (Keep this towards the end)
     systemInstructionParts.append(
         "\n\n--- IMPORTANT REMINDERS ---\n"
         "1. Role: AI assistant, NOT licensed therapist. No diagnoses/treatment.\n"
         "2. Ethics: Adhere to initial system prompt guidelines.\n"
         "3. Crisis: If user mentions self-harm/suicide/abuse, respond empathetically, "
         "urge professional help, provide crisis resources (e.g., 988 US). Do not manage crisis.\n"
-        "4. Context: Refer to User Background/Therapy Notes.\n"
+        "4. Context: Refer to User Background, Therapy Notes, and Past Conversations.\n"
         "--- END IMPORTANT REMINDERS ---"
     )
 
     combinedSystemInstruction = "".join(systemInstructionParts)
 
-    # --- Log Initial Context (Optional) ---
-    if logFile:
-
-        logFile.write(f"--- Session Start: {timestamp} ---\n")
-        logFile.write(f"Model: {MODEL_NAME}\n")
-        logFile.write(f"Rate Limit: {REQUESTS_PER_MINUTE}/min\n")
-        logFile.write("--- System Instruction Sent to Model ---\n")
-        logFile.write(combinedSystemInstruction)
-        logFile.write("\n--- End System Instruction ---\n\n")
-        logFile.flush()  # Ensure initial info is written
+    # --- Log Initial Context to Pre-Log File ---
+    if preLogFile:
+        preLogFile.write("\n--- System Instruction Sent to Model ---\n")
+        preLogFile.write(combinedSystemInstruction)
+        preLogFile.write("\n--- End System Instruction ---\n\n")
+        preLogFile.flush()
 
     console.print(Rule("Initializing AI Model", style="dim"))
 
@@ -563,8 +678,10 @@ def main():
             system_instruction=combinedSystemInstruction,
         )
 
-        # Start a chat session (history is managed internally)
-        chat = model.start_chat(history=[])  # Start with empty user/model turn history
+        # Start a chat session (history is managed internally by the SDK)
+        # The 'history' parameter here is for *this specific session's* turns,
+        # not the long-term history we loaded into the system prompt.
+        chat = model.start_chat(history=[])
 
         # Display centered "Ready" panel
         readyPanel = Panel(
@@ -588,22 +705,33 @@ def main():
             border_style="red",
         )
         console.print(errorMsg)
-        if logFile:
-
-            logFile.write(
-                errorMsgContent + "\n--- SESSION ENDED DUE TO INIT ERROR ---\n"
+        if preLogFile:
+            preLogFile.write(
+                f"\n{errorMsgContent}\n--- SESSION ENDED DUE TO INIT ERROR ---\n"
             )
-            logFile.close()
+            preLogFile.close()
 
         return
 
-    # --- Conversation Loop ---
-    # Initialize deque to store timestamps of messages sent
-    messageTimestamps = deque()
+    # --- Open Chat Log File ---
+    if logDirsCreated and chatLogFilename:
+        try:
+            chatLogFile = open(chatLogFilename, "w", encoding="utf-8")
+            # Use formatted start time for the header
+            chatLogFile.write(f"--- Chat Log Start: {formatted_start_time} ---\n")
+            chatLogFile.write(f"Model: {MODEL_NAME}\n")
+            chatLogFile.flush()
+        except IOError as e:
+            console.print(
+                f"[bold red]Error opening chat log file {chatLogFilename}:[/] {e}"
+            )
+            chatLogFile = None
+            chatLogFilename = None
 
+    # --- Conversation Loop ---
+    messageTimestamps = deque()
     i = 0
 
-    # Ask the user if they want to load the first prompt from a file (default is yes), with literal brackets
     response = (
         console.input(
             "Would you like to use the file for the first prompt? ([y]/n): ",
@@ -618,91 +746,69 @@ def main():
     try:  # Main loop try block
 
         while True:
+            current_time_str = datetime.datetime.now().strftime(
+                LOG_DETAIL_TIMESTAMP_FORMAT
+            )
 
             # Get user input
             try:
-
-                # TFor long prompts. pasting into terminal didnt paste entire prompt before
-                # clicking enter and starting thinking
                 if useFileFirstPrompt and i == 0:
-
                     userInput = Path("prompt.txt").read_text()
                     console.print(f"\n[bold blue]You: [/bold blue] {userInput}")
                     i += 1
-
                 else:
-
-                    # Use console.input for rich prompt
                     userInput = console.input(
                         Text("\nYou: ", style="bold blue")
                     ).strip()
 
-                # Handle empty input
                 if not userInput:
                     continue
 
             except EOFError:
-
                 console.print(
                     "\n[yellow]AI Therapist: Input stream closed. Ending session.[/]"
                 )
-                if logFile:
-                    logFile.write("\n--- Input stream closed by user ---\n")
-
+                if chatLogFile:
+                    chatLogFile.write("\n--- Input stream closed by user ---\n")
                 break
-
-            except KeyboardInterrupt:  # Catch Ctrl+C during input
-
+            except KeyboardInterrupt:
                 console.print(
                     "\n\n[yellow]AI Therapist: Session interrupted by user. Goodbye.[/]"
                 )
-                if logFile:
-                    logFile.write(
+                if chatLogFile:
+                    chatLogFile.write(
                         "\n--- Session interrupted by user (KeyboardInterrupt during input) ---\n"
                     )
-
-                break  # Exit the loop cleanly
+                break
 
             # Check for exit command
             if userInput.lower() in ["quit", "exit"]:
-
                 console.print(
                     "\n[yellow]AI Therapist: Ending session as requested. Take care.[/]"
                 )
-                if logFile:
-                    logFile.write(
+                if chatLogFile:
+                    chatLogFile.write(
                         "\n--- Session ended by user command ('quit'/'exit') ---\n"
                     )
-
                 break
 
-            # --- Log User Input ---
-            if logFile:
-
-                logFile.write(
-                    f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] You: {userInput}\n"
-                )
-                logFile.flush()
+            # --- Log User Input to Chat Log ---
+            if chatLogFile:
+                # Use the new timestamp format
+                chatLogFile.write(f"\n[{current_time_str}] You: {userInput}\n")
+                chatLogFile.flush()
 
             # --- Rate Limiting Check ---
-
             currentTime = time.time()
-
-            # Remove timestamps older than 60 seconds from the left
             while messageTimestamps and currentTime - messageTimestamps[0] > 60:
-
                 messageTimestamps.popleft()
 
-            # Check if the number of recent messages meets or exceeds the limit
             if len(messageTimestamps) >= REQUESTS_PER_MINUTE:
-
                 timeSinceOldest = currentTime - messageTimestamps[0]
-                # Calculate time needed to wait until the oldest message is > 60s old
-                waitTime = 60 - timeSinceOldest + 0.1  # Add small buffer
+                waitTime = 60 - timeSinceOldest + 0.1
                 waitMsg = (
                     f"Rate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
                 )
-
                 console.print(
                     Panel(
                         f"[bold yellow]{waitMsg}[/]",
@@ -710,74 +816,61 @@ def main():
                         expand=False,
                     )
                 )
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {waitMsg.strip()}\n"
+                if chatLogFile:
+                    # Use the new timestamp format for system messages too
+                    system_time_str = datetime.datetime.now().strftime(
+                        LOG_DETAIL_TIMESTAMP_FORMAT
+                    )
+                    chatLogFile.write(
+                        f"\n[{system_time_str}] System: {waitMsg.strip()}\n"
                     )
 
-                # Display rich progress bar timer
                 with Progress(
                     TextColumn("[progress.description]{task.description}"),
-                    BarColumn(bar_width=None),  # Use full width
+                    BarColumn(bar_width=None),
                     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                     TimeRemainingColumn(),
                     console=console,
-                    transient=True,  # Clear the progress bar when done
+                    transient=True,
                 ) as progress:
-
                     waitTask = progress.add_task(
                         "[yellow]Time until next message:[/]", total=waitTime
                     )
                     while not progress.finished:
-
                         progress.update(waitTask, advance=0.1)
                         time.sleep(0.1)
 
-                if logFile:
-                    logFile.write(f"  (Rate limit wait finished)\n")
+                if chatLogFile:
+                    chatLogFile.write(f"  (Rate limit wait finished)\n")
 
-                # Update current time after waiting
                 currentTime = time.time()
-                # Re-clean timestamps after waiting (optional but good practice)
                 while messageTimestamps and currentTime - messageTimestamps[0] > 60:
-
                     messageTimestamps.popleft()
 
             # --- Send Message and Get Response ---
-
             console.print(Text("\nAI Therapist: (Thinking...)", style="italic dim"))
-            aiResponseText = None  # Initialize in case of error before assignment
+            aiResponseText = None
 
             try:
-
-                # Record the timestamp *before* sending the message
                 messageTimestamps.append(time.time())
-
-                # Send message - chat history is automatically updated by the object
                 response = chat.send_message(userInput)
+                response_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )  # Get time after response
 
                 # --- Process Response ---
-                # Check for blocked content or other issues
-
                 if not response.parts:
-
-                    blockReason = "Unknown"  # Renamed variable
-
+                    blockReason = "Unknown"
                     if (
                         hasattr(response, "prompt_feedback")
                         and response.prompt_feedback.block_reason
                     ):
-
-                        blockReason = (
-                            response.prompt_feedback.block_reason.name
-                        )  # Use .name for enum
-
+                        blockReason = response.prompt_feedback.block_reason.name
                     elif (
                         hasattr(response, "candidates")
                         and response.candidates
                         and response.candidates[0].finish_reason.name != "STOP"
                     ):
-
                         blockReason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
 
                     warningMsgContent = (
@@ -793,36 +886,36 @@ def main():
                         "I apologize, but I encountered an issue or the content was blocked. "
                         "Could you rephrase or try a different topic?"
                     )
-                    if logFile:
-                        logFile.write(
-                            f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {warningMsgContent}\n"
+                    if chatLogFile:
+                        # Use the new timestamp format
+                        chatLogFile.write(
+                            f"\n[{response_time_str}] System: {warningMsgContent}\n"
                         )
-
                 else:
-
                     aiResponseText = response.text
 
-                # Print the AI's response using Markdown rendering within a Panel
                 console.print(
                     Panel(
                         Markdown(aiResponseText),
                         title="AI Therapist",
                         border_style="cyan",
-                        expand=False,  # Don't force panel to full width
+                        expand=False,
                     )
                 )
 
-                # --- Log AI Response ---
-                if logFile:
-
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] AI Therapist: {aiResponseText}\n"
+                # --- Log AI Response to Chat Log ---
+                if chatLogFile:
+                    # Use the new timestamp format
+                    chatLogFile.write(
+                        f"\n[{response_time_str}] AI Therapist: {aiResponseText}\n"
                     )
-                    logFile.flush()
+                    chatLogFile.flush()
 
             # --- API Error Handling within the loop ---
             except google.api_core.exceptions.PermissionDenied as e:
-
+                error_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )
                 errorMsgContent = f"API Error: Permission Denied. Check API key/model access. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -830,15 +923,16 @@ def main():
                     border_style="red",
                 )
                 console.print(errorMsg)
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
+                if chatLogFile:
+                    chatLogFile.write(
+                        f"\n[{error_time_str}] System Error: {errorMsgContent}\n"
                     )
-                # Decide whether to break or allow retry
-                # break
+                # break # Optional: break on permission denied
 
             except google.api_core.exceptions.NotFound as e:
-
+                error_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )
                 errorMsgContent = f"API Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -846,15 +940,16 @@ def main():
                     border_style="red",
                 )
                 console.print(errorMsg)
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                if chatLogFile:
+                    chatLogFile.write(
+                        f"\n[{error_time_str}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
-
-                break  # Likely fatal for this session
+                break
 
             except google.api_core.exceptions.ResourceExhausted as e:
-
+                error_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )
                 errorMsgContent = f"API Error: Quota Exceeded. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -862,18 +957,18 @@ def main():
                     border_style="red",
                 )
                 console.print(errorMsg)
-                # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
+                if chatLogFile:
+                    chatLogFile.write(
+                        f"\n[{error_time_str}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
-
                 break
 
             except google.api_core.exceptions.InvalidArgument as e:
-
+                error_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )
                 errorMsgContent = (
                     f"API Error: Invalid Argument (check prompt/content). Details: {e}"
                 )
@@ -883,36 +978,33 @@ def main():
                     border_style="red",
                 )
                 console.print(errorMsg)
-                # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
+                if chatLogFile:
+                    chatLogFile.write(
+                        f"\n[{error_time_str}] System Error: {errorMsgContent}\n"
                     )
-                # Log problematic input if needed (beware sensitive data)
-                # if logFile: logFile.write(f"Input causing error: {userInput}\n")
+                    # Optionally log userInput here if needed for debugging
 
             except Exception as e:
-
+                error_time_str = datetime.datetime.now().strftime(
+                    LOG_DETAIL_TIMESTAMP_FORMAT
+                )
                 errorMsgContent = f"Error during AI response generation: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]", title="Error", border_style="red"
                 )
                 console.print(errorMsg)
-                # Remove the timestamp for the failed request
                 if messageTimestamps:
                     messageTimestamps.pop()
-                if logFile:
-                    logFile.write(
-                        f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n"
+                if chatLogFile:
+                    chatLogFile.write(
+                        f"\n[{error_time_str}] System Error: {errorMsgContent}\n"
                     )
-                # General error, maybe allow user to try again
 
     # --- General Error Handling & Cleanup ---
-    # KeyboardInterrupt is now caught during input()
-    except Exception as e:  # Catch other unexpected errors in the loop
-
+    except Exception as e:
+        error_time_str = datetime.datetime.now().strftime(LOG_DETAIL_TIMESTAMP_FORMAT)
         errorMsgContent = f"An unexpected error occurred in the main loop: {e}"
         errorMsg = Panel(
             f"[bold red]{errorMsgContent}[/]",
@@ -920,29 +1012,30 @@ def main():
             border_style="red",
         )
         console.print(errorMsg)
-        if logFile:
-            logFile.write(
-                f"\n{errorMsgContent}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
+        if chatLogFile:
+            chatLogFile.write(
+                f"\n[{error_time_str}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
             )
 
     finally:
+        end_time_str = datetime.datetime.now().strftime(LOG_FILE_TIMESTAMP_FORMAT)
+        # Ensure the log files are closed properly
+        if preLogFile:
+            preLogFile.write(f"\n--- Pre-Chat Log End: {end_time_str} ---\n")
+            preLogFile.close()
+            if preLogFilename:
+                console.print(f"Pre-chat log saved to: [cyan]{preLogFilename}[/]")
 
-        # Ensure the log file is closed properly
-        if logFile:
-
-            logFile.write(
-                f"\n--- Session End: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n"
-            )
-            logFile.close()
-            if logFilename:  # Check if logFilename was set
-                console.print(f"Chat log saved to: [cyan]{logFilename}[/]")
+        if chatLogFile:
+            chatLogFile.write(f"\n--- Session End: {end_time_str} ---\n")
+            chatLogFile.close()
+            if chatLogFilename:
+                console.print(f"Chat log saved to: [cyan]{chatLogFilename}[/]")
 
         console.print(Rule("[bold cyan]AI Therapist Session Ended[/]", style="cyan"))
 
 
 # --- Main Execution ---
 if __name__ == "__main__":
-
-    # TODO: Add time to every user message, not just system prompt.
 
     main()
