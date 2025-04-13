@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 AI Therapist Application using Google Generative AI (Multi-Turn Chat).
 
@@ -26,7 +25,7 @@ Setup:
     6. A '.gitignore' file will be checked/created to ignore sensitive files.
 
 Execution:
-    python your_script_name.py
+    python therapist.py
 """
 
 import datetime  # For logging filenames
@@ -38,6 +37,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import google.api_core.exceptions
 import google.generativeai as genai
+import pytz
 from dotenv import load_dotenv
 from natsort import natsorted  # Import natsorted
 from rich.align import Align  # For centering
@@ -70,7 +70,6 @@ HISTORY_DIR = Path("history")  # Directory to store chat logs, to be ignored by 
 GITIGNORE_FILE = Path(".gitignore")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Warning: 'gemini-2.5-pro-exp-03-25' might be experimental. Use 'gemini-pro' or 'gemini-1.5-pro-latest' if issues arise.
 MODEL_NAME = "gemini-2.5-pro-exp-03-25"
 
 # Rate Limiting: Maximum number of requests allowed per minute
@@ -112,46 +111,41 @@ def EnsureGitignore():
     patternsToAdd = set()
     needsUpdate = False
 
-    #
     console.print(
         f"Checking [cyan]{GITIGNORE_FILE}[/] for necessary ignore patterns..."
     )
 
-    #
     try:
-        #
+
         if GITIGNORE_FILE.is_file():
-            #
+
             # Read existing patterns
             with open(GITIGNORE_FILE, "r", encoding="utf-8") as f:
-                #
+
                 existingPatterns = {
                     line.strip()
                     for line in f
                     if line.strip() and not line.strip().startswith("#")
                 }
 
-            #
             # Determine which patterns are missing
             patternsToAdd = ignorePatterns - existingPatterns
 
-            #
             if patternsToAdd:
-                #
+
                 needsUpdate = True
                 console.print(
                     f"  [yellow]Will add missing patterns:[/yellow] {', '.join(patternsToAdd)}"
                 )
-            #
+
             else:
-                #
+
                 console.print(
                     f"  [green]Already contains the necessary patterns.[/green]"
                 )
 
-        #
         else:
-            #
+
             # File doesn't exist, need to create it and add all patterns
             needsUpdate = True
             patternsToAdd = ignorePatterns
@@ -159,12 +153,11 @@ def EnsureGitignore():
                 f"  [yellow]{GITIGNORE_FILE} not found. Will create it.[/yellow]"
             )
 
-        #
         # If updates are needed, append to or create the file
         if needsUpdate:
-            #
+
             with open(GITIGNORE_FILE, "a", encoding="utf-8") as f:
-                #
+
                 # Add a header if the file is newly created or being added to significantly
                 if (
                     not GITIGNORE_FILE.exists() or patternsToAdd == ignorePatterns
@@ -175,28 +168,26 @@ def EnsureGitignore():
                 ):  # Only add header if adding something new to existing file
                     f.write("\n# Added by AI Therapist script\n")
 
-                #
                 for pattern in sorted(list(patternsToAdd)):  # Sort for consistent order
-                    #
+
                     f.write(f"{pattern}\n")
-            #
+
             console.print(f"  [green]{GITIGNORE_FILE} updated successfully.[/green]")
 
     except IOError as e:
-        #
+
         console.print(
             f"[bold red]Error accessing or modifying {GITIGNORE_FILE}:[/] {e}"
         )
         console.print("  Skipping .gitignore check/update.")
-    #
+
     except Exception as e:
-        #
+
         console.print(
             f"[bold red]An unexpected error occurred during .gitignore check:[/] {e}"
         )
         console.print("  Skipping .gitignore check/update.")
 
-    #
     # Add a rule after the check is complete
     console.print(Rule("Gitignore Check Complete", style="dim blue"))
 
@@ -220,31 +211,26 @@ def LoadTextFile(filePath: Path, fileDescription: str) -> str | None:
 
     """
 
-    #
     console.print(f"Loading {fileDescription}: [cyan]{filePath}[/]", style="dim")
 
-    #
     try:
-        #
+
         fileContent = filePath.read_text(encoding="utf-8")
-        #
+
         # console.print(f"  [green]Successfully loaded.[/]") # Keep output less verbose
 
-        #
         return fileContent
 
     except FileNotFoundError:
-        #
+
         console.print(f"  [bold red]Error:[/] File not found.")
 
-        #
         return None
 
     except IOError as e:
-        #
+
         console.print(f"  [bold red]Error reading file:[/] {e}")
 
-        #
         return None
 
 
@@ -268,44 +254,35 @@ def LoadTherapyNotes(directory: Path | None) -> str:
 
     """
 
-    #
     if directory is None:
-        #
+
         console.print(
             "[yellow]Info:[/] NOTES_DIR_PATH env var not set. No therapy notes loaded."
         )
 
-        #
         return ""
 
-    #
     if not directory.is_dir():
-        #
+
         console.print(
             f"[bold red]Error:[/] Notes directory not found/invalid: [cyan]{directory}[/]. No notes loaded."
         )
 
-        #
         return ""
 
-    #
     notesTexts = []
     # Use natsorted for natural sorting (e.g., file2.pdf before file10.pdf)
     pdfFiles = natsorted(list(directory.glob("*.pdf")))
 
-    #
     if not pdfFiles:
-        #
+
         console.print(f"[yellow]Info:[/] No PDF files found in [cyan]{directory}[/].")
 
-        #
         return ""
 
-    #
     processedCount = 0
     errorsEncountered = 0
 
-    #
     # Use Rich Progress for PDF processing visualization
     with Progress(
         SpinnerColumn(),
@@ -315,20 +292,18 @@ def LoadTherapyNotes(directory: Path | None) -> str:
         TextColumn("[cyan]({task.completed}/{task.total})[/]"),
         console=console,
     ) as progress:
-        #
+
         pdfTask = progress.add_task(
             f"Processing {len(pdfFiles)} PDFs in [cyan]{directory.name}[/]",
             total=len(pdfFiles),
         )
 
-        #
         for pdfPath in pdfFiles:
-            #
+
             progress.update(pdfTask, description=f"Processing [cyan]{pdfPath.name}[/]")
 
-            #
             try:
-                #
+
                 if not pdfPath.is_file():
                     # console.print(f"  [yellow]Warning:[/] Skipping [cyan]{pdfPath.name}[/], not a valid file.") # Too verbose with progress bar
                     progress.console.print(
@@ -336,7 +311,6 @@ def LoadTherapyNotes(directory: Path | None) -> str:
                     )
                     continue
 
-                #
                 doc = fitz.open(pdfPath)
                 pdfText = "".join(
                     page.get_text("text")
@@ -345,68 +319,61 @@ def LoadTherapyNotes(directory: Path | None) -> str:
                 )
                 doc.close()
 
-                #
                 pdfTextStripped = pdfText.strip()
 
-                #
                 if pdfTextStripped:
-                    #
+
                     notesTexts.append(
                         f"--- Start Notes: {pdfPath.name} ---\n{pdfTextStripped}\n--- End Notes: {pdfPath.name} ---"
                     )
                     # console.print(f"  [green]Successfully extracted text from {pdfPath.name}.[/]") # Too verbose
                     processedCount += 1
-                #
+
                 else:
-                    #
+
                     # console.print(f"  [yellow]Warning:[/] No text extracted from [cyan]{pdfPath.name}[/].") # Too verbose
                     progress.console.print(
                         f"[yellow]  No text in: {pdfPath.name}[/yellow]"
                     )
 
             except fitz.errors.FileDataError:
-                #
+
                 progress.console.print(
                     f"[red]  Error (corrupt/pwd?): {pdfPath.name}[/red]"
                 )
                 errorsEncountered += 1
-            #
+
             except Exception as e:
-                #
+
                 progress.console.print(
                     f"[red]  Error processing {pdfPath.name}: {e}[/red]"
                 )
                 errorsEncountered += 1
-            #
+
             finally:
-                #
+
                 progress.update(
                     pdfTask, advance=1
                 )  # Advance progress bar regardless of success/failure
 
-    #
     # Print summary after progress bar finishes
     if not notesTexts:
-        #
+
         console.print(
             "[bold yellow]Warning:[/] Could not extract text from any valid PDF files."
         )
 
-        #
         return ""
 
-    #
     summary_color = "green" if errorsEncountered == 0 else "yellow"
     console.print(
         f"[{summary_color}]Successfully combined therapy notes from {processedCount} PDF(s).[/]"
         f"{f' ([red]{errorsEncountered} errors[/])' if errorsEncountered > 0 else ''}"
     )
 
-    #
     # Combine all extracted notes into a single string
     combinedNotes = "\n\n".join(notesTexts)
 
-    #
     return combinedNotes
 
 
@@ -422,9 +389,8 @@ def main():
 
     # --- Validate Environment Variables & Setup History Dir ---
 
-    #
     if not API_KEY:
-        #
+
         console.print(
             Panel(
                 "[bold red]Fatal Error: GEMINI_API_KEY environment variable not set.[/]\nPlease set the environment variable (or use a .env file) and restart.",
@@ -433,35 +399,32 @@ def main():
             )
         )
 
-        #
         return
 
-    #
     if not NOTES_DIR_PATH_STR:  # Check if the path string was retrieved
-        #
+
         console.print(
             "[yellow]Warning:[/] 'NOTES_DIR_PATH' environment variable not set or invalid."
         )
         # NOTES_DIR will be None, LoadTherapyNotes handles this.
 
-    #
     # Create history directory if it doesn't exist
     logFile = None  # Initialize logFile to None
     logFilename = None  # Initialize logFilename to None
-    #
+
     try:
-        #
+
         HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-    #
+
     except OSError as e:
-        #
+
         console.print(
             f"[bold red]Error creating history directory {HISTORY_DIR}:[/] {e}"
         )
         # Decide if this is fatal or just proceed without logging
         console.print("[yellow]Proceeding without chat logging.[/]")
         # logFile remains None
-    #
+
     else:
         # --- Setup Logging ---
         # Generate a unique filename for this session's log
@@ -470,11 +433,11 @@ def main():
         console.print(f"Logging chat session to: [cyan]{logFilename}[/]")
         # Open the log file in append mode, using 'utf-8' encoding
         try:
-            #
+
             logFile = open(logFilename, "a", encoding="utf-8")
-        #
+
         except IOError as e:
-            #
+
             console.print(f"[bold red]Error opening log file {logFilename}:[/] {e}")
             logFile = None  # Ensure logFile is None if opening fails
 
@@ -482,12 +445,10 @@ def main():
 
     # --- Load Static Context ---
 
-    #
     baseSystemPrompt = LoadTextFile(SYS_PROMPT_FILE, "system prompt")
 
-    #
     if baseSystemPrompt is None:
-        #
+
         console.print(
             Panel(
                 "[bold red]Fatal Error: Could not load system prompt. Exiting.[/]",
@@ -498,30 +459,47 @@ def main():
         if logFile:
             logFile.close()  # Close log file if open
 
-        #
         return
 
-    #
+    def GetFormattedDateTime() -> str:
+        """
+        Gets the current date and time formatted with time zone, non-24-hour clock, and day of the week.
+
+        Returns
+        -------
+        str
+            The formatted date and time string.
+        """
+
+        # TODO: Replace with desired timezone
+        localTimezone = pytz.timezone("America/New_York")
+        now = datetime.datetime.now(localTimezone)
+        return now.strftime("%A, %I:%M %p %Z on %B %d, %Y")
+
+    formattedDateTime = GetFormattedDateTime()
+    # console.print(f"Current Date and Time: [cyan]{formattedDateTime}[/]")
+
+    # Add formatted date and time to the base system prompt
+    baseSystemPrompt = (
+        f"Current Date and Time: {formattedDateTime}\n\n{baseSystemPrompt}"
+    )
+
     userBackground = LoadTextFile(BACKGROUND_FILE, "user background")
 
-    #
     if userBackground is None:
-        #
+
         console.print(
             "[yellow]Warning:[/] Could not load user background file. Using fallback."
         )
         userBackground = "No user background information was loaded."
 
-    #
     therapyNotesText = LoadTherapyNotes(NOTES_DIR)  # Handles None NOTES_DIR
 
     # --- Construct the SINGLE System Instruction ---
     # Combine all static context into one block for the model's system instruction
 
-    #
     systemInstructionParts = [baseSystemPrompt]
 
-    #
     systemInstructionParts.append(
         "\n\n--- USER BACKGROUND INFORMATION ---\n"
         "Use this information to personalize responses and understand context.\n\n"
@@ -529,25 +507,23 @@ def main():
         "--- END USER BACKGROUND INFORMATION ---"
     )
 
-    #
     if therapyNotesText:
-        #
+
         systemInstructionParts.append(
             "\n\n--- BEGIN THERAPY NOTES HISTORY ---\n"
             "Use these notes (prioritizing over background if conflicting) for context.\n\n"
             f"{therapyNotesText}\n\n"
             "--- END THERAPY NOTES HISTORY ---"
         )
-    #
+
     else:
-        #
+
         systemInstructionParts.append(
             "\n\n--- THERAPY NOTES HISTORY ---\n"
             "No therapy notes loaded. Base responses on background and conversation."
             "\n--- END THERAPY NOTES HISTORY ---"
         )
 
-    #
     # Append Ethical Guidelines Reminder
     systemInstructionParts.append(
         "\n\n--- IMPORTANT REMINDERS ---\n"
@@ -559,12 +535,11 @@ def main():
         "--- END IMPORTANT REMINDERS ---"
     )
 
-    #
     combinedSystemInstruction = "".join(systemInstructionParts)
 
     # --- Log Initial Context (Optional) ---
     if logFile:
-        #
+
         logFile.write(f"--- Session Start: {timestamp} ---\n")
         logFile.write(f"Model: {MODEL_NAME}\n")
         logFile.write(f"Rate Limit: {REQUESTS_PER_MINUTE}/min\n")
@@ -577,12 +552,10 @@ def main():
 
     # --- Initialize Google AI ---
 
-    #
     try:
-        #
+
         genai.configure(api_key=API_KEY)
 
-        #
         # Create the model with the combined system instruction
         model = genai.GenerativeModel(
             MODEL_NAME,
@@ -590,11 +563,9 @@ def main():
             system_instruction=combinedSystemInstruction,
         )
 
-        #
         # Start a chat session (history is managed internally)
         chat = model.start_chat(history=[])  # Start with empty user/model turn history
 
-        #
         # Display centered "Ready" panel
         readyPanel = Panel(
             f"[bold green]AI Therapist Ready[/]\n"
@@ -609,7 +580,7 @@ def main():
         console.print(Align.center(readyPanel))
 
     except Exception as e:
-        #
+
         errorMsgContent = f"Fatal Error during AI Initialization: {e}\nCheck API key, model name, and network connection."
         errorMsg = Panel(
             f"[bold red]{errorMsgContent}[/]",
@@ -618,47 +589,70 @@ def main():
         )
         console.print(errorMsg)
         if logFile:
-            #
+
             logFile.write(
                 errorMsgContent + "\n--- SESSION ENDED DUE TO INIT ERROR ---\n"
             )
             logFile.close()
 
-        #
         return
 
     # --- Conversation Loop ---
-
     # Initialize deque to store timestamps of messages sent
     messageTimestamps = deque()
 
-    #
+    i = 0
+
+    # Ask the user if they want to load the first prompt from a file (default is yes), with literal brackets
+    response = (
+        console.input(
+            "Would you like to use the file for the first prompt? ([y]/n): ",
+            markup=False,
+        )
+        .strip()
+        .lower()
+        or "y"
+    )
+    useFileFirstPrompt = response.startswith("y")
+
     try:  # Main loop try block
-        #
+
         while True:
-            #
+
             # Get user input
             try:
-                # Use console.input for rich prompt
-                userInput = console.input(Text("\nYou: ", style="bold blue")).strip()
 
-                #
-                if not userInput:  # Handle empty input
+                # TFor long prompts. pasting into terminal didnt paste entire prompt before
+                # clicking enter and starting thinking
+                if useFileFirstPrompt and i == 0:
+
+                    userInput = Path("prompt.txt").read_text()
+                    console.print(f"\n[bold blue]You: [/bold blue] {userInput}")
+                    i += 1
+
+                else:
+
+                    # Use console.input for rich prompt
+                    userInput = console.input(
+                        Text("\nYou: ", style="bold blue")
+                    ).strip()
+
+                # Handle empty input
+                if not userInput:
                     continue
 
             except EOFError:
-                #
+
                 console.print(
                     "\n[yellow]AI Therapist: Input stream closed. Ending session.[/]"
                 )
                 if logFile:
                     logFile.write("\n--- Input stream closed by user ---\n")
 
-                #
                 break
-            #
+
             except KeyboardInterrupt:  # Catch Ctrl+C during input
-                #
+
                 console.print(
                     "\n\n[yellow]AI Therapist: Session interrupted by user. Goodbye.[/]"
                 )
@@ -667,13 +661,11 @@ def main():
                         "\n--- Session interrupted by user (KeyboardInterrupt during input) ---\n"
                     )
 
-                #
                 break  # Exit the loop cleanly
 
-            #
             # Check for exit command
             if userInput.lower() in ["quit", "exit"]:
-                #
+
                 console.print(
                     "\n[yellow]AI Therapist: Ending session as requested. Take care.[/]"
                 )
@@ -682,12 +674,11 @@ def main():
                         "\n--- Session ended by user command ('quit'/'exit') ---\n"
                     )
 
-                #
                 break
 
             # --- Log User Input ---
             if logFile:
-                #
+
                 logFile.write(
                     f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] You: {userInput}\n"
                 )
@@ -695,18 +686,16 @@ def main():
 
             # --- Rate Limiting Check ---
 
-            #
             currentTime = time.time()
 
             # Remove timestamps older than 60 seconds from the left
             while messageTimestamps and currentTime - messageTimestamps[0] > 60:
-                #
+
                 messageTimestamps.popleft()
 
-            #
             # Check if the number of recent messages meets or exceeds the limit
             if len(messageTimestamps) >= REQUESTS_PER_MINUTE:
-                #
+
                 timeSinceOldest = currentTime - messageTimestamps[0]
                 # Calculate time needed to wait until the oldest message is > 60s old
                 waitTime = 60 - timeSinceOldest + 0.1  # Add small buffer
@@ -714,7 +703,6 @@ def main():
                     f"Rate limit reached ({REQUESTS_PER_MINUTE}/min). Please wait..."
                 )
 
-                #
                 console.print(
                     Panel(
                         f"[bold yellow]{waitMsg}[/]",
@@ -727,7 +715,6 @@ def main():
                         f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {waitMsg.strip()}\n"
                     )
 
-                #
                 # Display rich progress bar timer
                 with Progress(
                     TextColumn("[progress.description]{task.description}"),
@@ -737,70 +724,62 @@ def main():
                     console=console,
                     transient=True,  # Clear the progress bar when done
                 ) as progress:
-                    #
+
                     waitTask = progress.add_task(
                         "[yellow]Time until next message:[/]", total=waitTime
                     )
                     while not progress.finished:
-                        #
+
                         progress.update(waitTask, advance=0.1)
                         time.sleep(0.1)
 
-                #
                 if logFile:
                     logFile.write(f"  (Rate limit wait finished)\n")
 
-                #
                 # Update current time after waiting
                 currentTime = time.time()
                 # Re-clean timestamps after waiting (optional but good practice)
                 while messageTimestamps and currentTime - messageTimestamps[0] > 60:
-                    #
+
                     messageTimestamps.popleft()
 
             # --- Send Message and Get Response ---
 
-            #
             console.print(Text("\nAI Therapist: (Thinking...)", style="italic dim"))
             aiResponseText = None  # Initialize in case of error before assignment
 
-            #
             try:
-                #
+
                 # Record the timestamp *before* sending the message
                 messageTimestamps.append(time.time())
 
-                #
                 # Send message - chat history is automatically updated by the object
                 response = chat.send_message(userInput)
 
                 # --- Process Response ---
                 # Check for blocked content or other issues
 
-                #
                 if not response.parts:
-                    #
+
                     blockReason = "Unknown"  # Renamed variable
 
-                    #
                     if (
                         hasattr(response, "prompt_feedback")
                         and response.prompt_feedback.block_reason
                     ):
-                        #
+
                         blockReason = (
                             response.prompt_feedback.block_reason.name
                         )  # Use .name for enum
-                    #
+
                     elif (
                         hasattr(response, "candidates")
                         and response.candidates
                         and response.candidates[0].finish_reason.name != "STOP"
                     ):
-                        #
+
                         blockReason = f"Finish Reason: {response.candidates[0].finish_reason.name}"
 
-                    #
                     warningMsgContent = (
                         f"AI response empty/blocked. Reason: {blockReason}"
                     )
@@ -819,12 +798,10 @@ def main():
                             f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System: {warningMsgContent}\n"
                         )
 
-                #
                 else:
-                    #
+
                     aiResponseText = response.text
 
-                #
                 # Print the AI's response using Markdown rendering within a Panel
                 console.print(
                     Panel(
@@ -837,7 +814,7 @@ def main():
 
                 # --- Log AI Response ---
                 if logFile:
-                    #
+
                     logFile.write(
                         f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] AI Therapist: {aiResponseText}\n"
                     )
@@ -845,7 +822,7 @@ def main():
 
             # --- API Error Handling within the loop ---
             except google.api_core.exceptions.PermissionDenied as e:
-                #
+
                 errorMsgContent = f"API Error: Permission Denied. Check API key/model access. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -859,9 +836,9 @@ def main():
                     )
                 # Decide whether to break or allow retry
                 # break
-            #
+
             except google.api_core.exceptions.NotFound as e:
-                #
+
                 errorMsgContent = f"API Error: Model '{MODEL_NAME}' Not Found or unavailable. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -874,11 +851,10 @@ def main():
                         f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
 
-                #
                 break  # Likely fatal for this session
-            #
+
             except google.api_core.exceptions.ResourceExhausted as e:
-                #
+
                 errorMsgContent = f"API Error: Quota Exceeded. Details: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]",
@@ -894,11 +870,10 @@ def main():
                         f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] System Error: {errorMsgContent}\n--- SESSION ENDED DUE TO API ERROR ---\n"
                     )
 
-                #
                 break
-            #
+
             except google.api_core.exceptions.InvalidArgument as e:
-                #
+
                 errorMsgContent = (
                     f"API Error: Invalid Argument (check prompt/content). Details: {e}"
                 )
@@ -917,9 +892,9 @@ def main():
                     )
                 # Log problematic input if needed (beware sensitive data)
                 # if logFile: logFile.write(f"Input causing error: {userInput}\n")
-            #
+
             except Exception as e:
-                #
+
                 errorMsgContent = f"Error during AI response generation: {e}"
                 errorMsg = Panel(
                     f"[bold red]{errorMsgContent}[/]", title="Error", border_style="red"
@@ -937,7 +912,7 @@ def main():
     # --- General Error Handling & Cleanup ---
     # KeyboardInterrupt is now caught during input()
     except Exception as e:  # Catch other unexpected errors in the loop
-        #
+
         errorMsgContent = f"An unexpected error occurred in the main loop: {e}"
         errorMsg = Panel(
             f"[bold red]{errorMsgContent}[/]",
@@ -949,25 +924,25 @@ def main():
             logFile.write(
                 f"\n{errorMsgContent}\n--- SESSION ENDED DUE TO UNEXPECTED ERROR ---\n"
             )
-    #
+
     finally:
-        #
+
         # Ensure the log file is closed properly
         if logFile:
-            #
+
             logFile.write(
                 f"\n--- Session End: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n"
             )
             logFile.close()
             if logFilename:  # Check if logFilename was set
                 console.print(f"Chat log saved to: [cyan]{logFilename}[/]")
-        #
+
         console.print(Rule("[bold cyan]AI Therapist Session Ended[/]", style="cyan"))
 
 
 # --- Main Execution ---
-
-#
 if __name__ == "__main__":
-    #
+
+    # TODO: Add time to every user message, not just system prompt.
+
     main()
