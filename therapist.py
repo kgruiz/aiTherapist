@@ -69,8 +69,8 @@ NOTES_DIR = Path(NOTES_DIR_PATH_STR) if NOTES_DIR_PATH_STR else None
 SYS_PROMPT_FILE = Path("sysprompt.txt")
 BACKGROUND_FILE = Path("background.txt")  # File to be ignored by git
 HISTORY_DIR = Path("history")  # Base directory for logs
-PRE_LOG_SUBDIR = HISTORY_DIR / "pre_chat_logs"  # Subdirectory for pre-chat logs
-CHAT_LOG_SUBDIR = HISTORY_DIR / "chat_logs"  # Subdirectory for chat logs
+PRE_LOG_SUBDIR = HISTORY_DIR / "pre-chat-logs"  # Subdirectory for pre-chat logs
+CHAT_LOG_SUBDIR = HISTORY_DIR / "chat-logs"  # Subdirectory for chat logs
 GITIGNORE_FILE = Path(".gitignore")
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -388,13 +388,13 @@ def LoadTherapyNotes(directory: Path | None) -> str:
     return combinedNotes
 
 
-def LoadPastConversations(chat_log_dir: Path) -> str:
+def LoadPastConversations(chatLogDir: Path) -> str:
     """
     Loads and combines content from previous chat log files.
 
     Parameters
     ----------
-    chat_log_dir : Path
+    chatLogDir : Path
         The path object pointing to the directory containing chat log files.
 
     Returns
@@ -405,22 +405,20 @@ def LoadPastConversations(chat_log_dir: Path) -> str:
         doesn't exist, is empty, or an error occurs.
     """
     console.print(
-        f"Loading past conversations from: [cyan]{chat_log_dir}[/]", style="dim"
+        f"Loading past conversations from: [cyan]{chatLogDir}[/]", style="dim"
     )
-    if not chat_log_dir.is_dir():
+    if not chatLogDir.is_dir():
         console.print(
             f"  [yellow]Info:[/] Chat log directory not found. No past conversations loaded."
         )
         return ""
 
     # Find chat log files, sort them naturally by filename (which includes timestamp)
-    log_files = natsorted(
-        [f for f in chat_log_dir.glob("chat_log_*.txt") if f.is_file()]
-    )
+    log_files = natsorted([f for f in chatLogDir.glob("chat-log-*.txt") if f.is_file()])
 
     if not log_files:
         console.print(
-            f"  [yellow]Info:[/] No past chat logs found in [cyan]{chat_log_dir}[/]."
+            f"  [yellow]Info:[/] No past chat logs found in [cyan]{chatLogDir}[/]."
         )
         return ""
 
@@ -526,8 +524,8 @@ def main():
     if logDirsCreated:
         # Generate unique filenames using the start time's timestamp part
         timestamp_str = start_time.strftime("%Y-%m-%d_%H-%M-%S")
-        preLogFilename = PRE_LOG_SUBDIR / f"pre_chat_log_{timestamp_str}.txt"
-        chatLogFilename = CHAT_LOG_SUBDIR / f"chat_log_{timestamp_str}.txt"
+        preLogFilename = PRE_LOG_SUBDIR / f"pre-chat-log-{timestamp_str}.txt"
+        chatLogFilename = CHAT_LOG_SUBDIR / f"chat-log-{timestamp_str}.txt"
 
         console.print(f"Attempting to log pre-chat info to: [cyan]{preLogFilename}[/]")
         console.print(
@@ -736,12 +734,12 @@ def main():
 
     response = (
         console.input(
-            "Would you like to use the file for the first prompt? ([y]/n): ",
+            "Would you like to use the file for the first prompt? (y/[n]): ",
             markup=False,
         )
         .strip()
         .lower()
-        or "y"
+        or "n"
     )
     useFileFirstPrompt = response.startswith("y")
 
@@ -1039,5 +1037,7 @@ def main():
 
 # --- Main Execution ---
 if __name__ == "__main__":
+
+    # TODO: Ability to stop thinking and request to edit message?
 
     main()
