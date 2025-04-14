@@ -34,6 +34,7 @@ import datetime  # For logging filenames
 import os
 import time  # For rate limiting and logging
 from collections import deque  # For rate limiting timestamp tracking
+from enum import Enum
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -86,17 +87,33 @@ LOG_DETAIL_TIMESTAMP_FORMAT = "%Y-%m-%d %A %H:%M:%S"
 # Timestamp format for log file start/end markers
 LOG_FILE_TIMESTAMP_FORMAT = "%Y-%m-%d %A %H:%M:%S"
 
-# --- Safety Settings (Example - Adjust as needed) ---
+
+# Threshold options for safety settings:
+# "BLOCK_NONE",
+# "BLOCK_LOW_AND_ABOVE",
+# "BLOCK_MEDIUM_AND_ABOVE",
+# "BLOCK_ONLY_HIGH",
+class SafetySetting(Enum):
+
+    none = "BLOCK_NONE"
+    low = "BLOCK_LOW_AND_ABOVE"
+    medium = "BLOCK_MEDIUM_AND_ABOVE"
+    high = "BLOCK_ONLY_HIGH"
+
+
+# --- Safety Settings (Adjust as needed) ---
+UNIVERSAL_SAFETY_SETTING = SafetySetting.none
+
 SAFETY_SETTINGS = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": UNIVERSAL_SAFETY_SETTING},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": UNIVERSAL_SAFETY_SETTING},
     {
         "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+        "threshold": UNIVERSAL_SAFETY_SETTING,
     },
     {
         "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+        "threshold": UNIVERSAL_SAFETY_SETTING,
     },
 ]
 
