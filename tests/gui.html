@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Therapist</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Custom styles */
+      body {
+        font-family: "Inter", sans-serif;
+        /* Apply the dynamic gradient background */
+        background: linear-gradient(
+          to bottom right,
+          #4f46e5,
+          #1e293b,
+          #0ea5e9
+        ); /* from-indigo-900 via-slate-900 to-sky-800 approximation */
+        min-height: 100vh;
+        overflow: hidden; /* Prevent scrolling of the main body */
+      }
+
+      /* Helper class for frosted glass effect */
+      .frosted-glass {
+        backdrop-filter: blur(16px); /* backdrop-blur-md */
+        -webkit-backdrop-filter: blur(16px); /* Safari support */
+        background-color: rgba(255, 255, 255, 0.1); /* bg-white/10 */
+        border: 1px solid rgba(255, 255, 255, 0.3); /* border border-white/30 */
+        border-radius: 1rem; /* rounded-2xl */
+      }
+
+      /* Custom scrollbar for chat (optional but nice) */
+      .chat-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .chat-scroll::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 3px;
+      }
+
+      /* Simple glow effect on hover */
+      .hover-glow:hover {
+        box-shadow: 0 0 15px 2px rgba(199, 210, 254, 0.5); /* Example glow - adjust color/intensity */
+        transition: box-shadow 0.3s ease-in-out;
+      }
+
+      /* Pill switch styling */
+      .pill-switch {
+        display: inline-flex;
+        border-radius: 9999px; /* rounded-full */
+        padding: 0.25rem; /* p-1 */
+        background-color: rgba(
+          0,
+          0,
+          0,
+          0.2
+        ); /* Darker background for contrast */
+      }
+      .pill-switch button {
+        padding: 0.25rem 0.75rem; /* py-1 px-3 */
+        border-radius: 9999px; /* rounded-full */
+        font-size: 0.875rem; /* text-sm */
+        font-weight: 500; /* font-medium */
+        color: rgba(255, 255, 255, 0.7); /* text-white/70 */
+        transition: all 0.3s ease-in-out;
+      }
+      .pill-switch button.active {
+        background-color: rgba(255, 255, 255, 0.2); /* bg-white/20 */
+        color: white;
+        box-shadow: 0 0 8px 1px rgba(199, 210, 254, 0.4); /* Soft glow */
+      }
+
+      /* Subtle outline glow on focus */
+      .focus-glow:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(165, 180, 252, 0.4); /* Example focus ring - adjust color/intensity */
+      }
+
+      /* Typing indicator animation */
+      .typing-dot {
+        animation: pulse 1.4s infinite ease-in-out both;
+        background-color: currentColor;
+        border-radius: 50%;
+        width: 6px;
+        height: 6px;
+        display: inline-block;
+        margin: 0 2px;
+      }
+      .typing-dot:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+      .typing-dot:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+      @keyframes pulse {
+        0%,
+        80%,
+        100% {
+          opacity: 0.3;
+        }
+        40% {
+          opacity: 1;
+        }
+      }
+
+      /* Fade-in animation (example) */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .fade-in {
+        animation: fadeIn 0.5s ease-out forwards;
+      }
+      /* Staggered word reveal could be done with JS splitting text and applying delays */
+    </style>
+  </head>
+  <body class="text-white tracking-wide">
+    <div class="flex h-screen overflow-hidden">
+      <aside
+        class="w-64 p-4 space-y-6 frosted-glass !rounded-none !border-r !border-l-0 !border-t-0 !border-b-0 flex flex-col justify-between hover-glow transition-shadow duration-300 ease-in-out"
+      >
+        <div class="space-y-6">
+          <div class="flex items-center space-x-3 p-2 frosted-glass hover-glow">
+            <div
+              class="w-10 h-10 bg-indigo-400 rounded-full flex items-center justify-center text-xl"
+            >
+              👤
+            </div>
+            <div>
+              <div class="font-semibold">User Name</div>
+              <div
+                class="text-xs px-2 py-0.5 bg-white/20 rounded-full inline-block"
+              >
+                😊 Calm
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2">
+              Modes
+            </h3>
+            <div class="pill-switch frosted-glass">
+              <button class="active">Guided</button>
+              <button>Reflective</button>
+              <button>Journaling</button>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2">
+              Tools
+            </h3>
+            <nav class="space-y-2">
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              >
+                <span class="text-lg">🧠</span> <span>Memory Vault</span>
+              </button>
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              >
+                <span class="text-lg">🧘</span> <span>Breathing</span>
+              </button>
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              >
+                <span class="text-lg">📊</span> <span>Mood History</span>
+              </button>
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              >
+                <span class="text-lg">🗃️</span> <span>Sessions</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        <div class="space-y-2 border-t border-white/20 pt-4">
+          <button
+            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+          >
+            <span class="text-lg">⚙️</span> <span>Settings</span>
+          </button>
+          <button
+            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 transition-colors duration-200 hover-glow text-red-100"
+          >
+            <span class="text-lg">🔒</span> <span>Quick Hide</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="flex-1 flex flex-col relative">
+        <div class="flex-1 overflow-y-auto p-6 space-y-4 chat-scroll">
+          <div class="flex justify-start group fade-in">
+            <div class="max-w-lg">
+              <div
+                class="text-xs text-purple-300/80 mb-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              >
+                Detected emotion: anxious
+              </div>
+              <div
+                class="frosted-glass !bg-purple-500/10 p-3 rounded-t-xl rounded-br-xl shadow-md relative"
+              >
+                <p class="text-sm">
+                  Hello there. I noticed you mentioned feeling a bit overwhelmed
+                  earlier. How are you feeling right now?
+                </p>
+                <span class="text-xs text-white/50 block text-right mt-1"
+                  >10:30 AM</span
+                >
+                <div
+                  class="absolute -bottom-3 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                  >
+                    👍
+                  </button>
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                  >
+                    👎
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-start fade-in">
+            <div
+              class="frosted-glass !bg-purple-500/10 p-3 rounded-t-xl rounded-br-xl inline-flex items-center space-x-1"
+            >
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="flex justify-end group fade-in">
+            <div class="max-w-lg">
+              <div
+                class="frosted-glass !bg-blue-500/10 p-3 rounded-t-xl rounded-bl-xl shadow-md relative"
+              >
+                <p class="text-sm">
+                  I'm still feeling a bit stressed, mostly about the upcoming
+                  presentation.
+                </p>
+                <span class="text-xs text-white/50 block text-right mt-1"
+                  >10:31 AM</span
+                >
+                <div
+                  class="absolute -bottom-3 left-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                  >
+                    👍
+                  </button>
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                  >
+                    👎
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 pt-0">
+          <div
+            class="w-full max-w-3xl mx-auto frosted-glass p-2 flex items-center space-x-2 shadow-lg ring-1 ring-black/5 hover-glow"
+          >
+            <textarea
+              rows="1"
+              placeholder="Type your message or / for tools..."
+              class="flex-1 bg-transparent border-none focus:ring-0 resize-none p-2 text-sm placeholder-white/50 focus-glow rounded-lg"
+              style="min-height: 40px; /* Adjust as needed */"
+              oninput='this.style.height = "";this.style.height = this.scrollHeight + "px"'
+            ></textarea>
+            <button
+              class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              title="Mood"
+            >
+              <span class="text-xl">🌤️</span>
+            </button>
+            <button
+              class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              title="Mode Switch"
+            >
+              <span class="text-xl">🎯</span>
+            </button>
+            <button
+              class="p-2 rounded-lg bg-indigo-500/30 hover:bg-indigo-500/50 transition-colors duration-200 hover-glow"
+              title="Voice Input"
+            >
+              <span class="text-xl">🎤</span>
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div
+      id="memoryVaultModal"
+      class="fixed inset-0 bg-black/30 flex items-center justify-center p-8 hidden z-50"
+    >
+      <div
+        class="w-full max-w-2xl h-3/4 frosted-glass p-6 rounded-2xl shadow-2xl flex flex-col"
+      >
+        <h2 class="text-2xl font-semibold mb-4">🧠 Memory Vault</h2>
+        <div
+          class="flex-1 overflow-y-auto bg-white/5 p-4 rounded-lg mb-4 chat-scroll"
+        >
+          <p class="text-sm text-white/80 mb-2">What I know about you:</p>
+          <textarea
+            class="w-full h-40 bg-transparent border border-white/20 rounded-lg p-2 text-sm focus-glow"
+          >
+You mentioned feeling anxious about presentations.
+You enjoy spending time in nature.
+Your goal is to manage stress more effectively.</textarea
+          >
+        </div>
+        <button
+          onclick="document.getElementById('memoryVaultModal').classList.add('hidden')"
+          class="self-end px-4 py-2 bg-indigo-500/50 hover:bg-indigo-500/70 rounded-lg transition-colors duration-200"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="quickHideOverlay"
+      class="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-center justify-center text-4xl font-bold text-white/50 hidden z-50"
+    >
+      Paused 🔒
+    </div>
+
+    <script>
+      // Example: Show Memory Vault (Connect this to the sidebar button)
+      // document.querySelector('button:contains("Memory Vault")').addEventListener('click', () => {
+      //     document.getElementById('memoryVaultModal').classList.remove('hidden');
+      // });
+
+      // Example: Quick Hide (Connect this to the sidebar button)
+      // document.querySelector('button:contains("Quick Hide")').addEventListener('click', () => {
+      //     document.getElementById('quickHideOverlay').classList.remove('hidden');
+      //     // Add logic to re-show later
+      // });
+
+      // Add auto-grow for textarea
+      const textarea = document.querySelector("textarea");
+      textarea.addEventListener("input", () => {
+        textarea.style.height = "auto"; // Reset height
+        textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
+      });
+
+      // Placeholder for blur on inactive tab (Requires more complex JS)
+      // window.addEventListener('blur', () => { document.body.classList.add('backdrop-blur-sm'); });
+      // window.addEventListener('focus', () => { document.body.classList.remove('backdrop-blur-sm'); });
+    </script>
+  </body>
+</html>
