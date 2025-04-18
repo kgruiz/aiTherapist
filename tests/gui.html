@@ -11,17 +11,25 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- Heroicons for send icon -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/@heroicons/vue@1.0.4/dist/heroicons.min.css"
+      rel="stylesheet"
+    />
+
     <style>
       /* Custom styles */
       body {
         font-family: "Inter", sans-serif;
-        /* Apply the dynamic gradient background */
+        /* Apply a more complex gradient background */
         background: linear-gradient(
-          to bottom right,
-          #4f46e5,
-          #1e293b,
-          #0ea5e9
-        ); /* from-indigo-900 via-slate-900 to-sky-800 approximation */
+          135deg,
+          #4f46e5 0%,
+          #3b0764 20%,
+          #1e1b4b 50%,
+          #083344 80%,
+          #0e7490 100%
+        );
         min-height: 100vh;
         overflow: hidden; /* Prevent scrolling of the main body */
       }
@@ -74,9 +82,16 @@
         transition: all 0.3s ease-in-out;
       }
       .pill-switch button.active {
-        background-color: rgba(255, 255, 255, 0.2); /* bg-white/20 */
+        background-color: rgba(
+          255,
+          255,
+          255,
+          0.3
+        ); /* bg-white/30 - slightly more opaque */
         color: white;
         box-shadow: 0 0 8px 1px rgba(199, 210, 254, 0.4); /* Soft glow */
+        /* Added subtle scale for active */
+        transform: scale(1.05);
       }
 
       /* Subtle outline glow on focus */
@@ -112,21 +127,39 @@
         }
       }
 
-      /* Fade-in animation (example) */
-      @keyframes fadeIn {
+      /* Fade-in and slight slide-up animation */
+      @keyframes fadeInSlideUp {
         from {
           opacity: 0;
-          transform: translateY(10px);
+          transform: translateY(5px);
         }
         to {
           opacity: 1;
           transform: translateY(0);
         }
       }
-      .fade-in {
-        animation: fadeIn 0.5s ease-out forwards;
+      .fade-in-slide-up {
+        animation: fadeInSlideUp 0.4s ease-out forwards;
       }
-      /* Staggered word reveal could be done with JS splitting text and applying delays */
+
+      /* Quick Hide animation placeholder */
+      @keyframes pulsateLock {
+        0% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+      }
+      .quick-hide-text span {
+        animation: pulsateLock 1.5s infinite ease-in-out;
+      }
     </style>
   </head>
   <body class="text-white tracking-wide">
@@ -135,19 +168,29 @@
         class="w-64 p-4 space-y-6 frosted-glass !rounded-none !border-r !border-l-0 !border-t-0 !border-b-0 flex flex-col justify-between hover-glow transition-shadow duration-300 ease-in-out"
       >
         <div class="space-y-6">
-          <div class="flex items-center space-x-3 p-2 frosted-glass hover-glow">
-            <div
-              class="w-10 h-10 bg-indigo-400 rounded-full flex items-center justify-center text-xl"
-            >
-              👤
-            </div>
-            <div>
-              <div class="font-semibold">User Name</div>
+          <div
+            class="space-y-2 p-2 rounded-lg border border-white/20 bg-white/5 hover-glow"
+          >
+            <div class="flex items-center space-x-3">
               <div
-                class="text-xs px-2 py-0.5 bg-white/20 rounded-full inline-block"
+                class="w-10 h-10 bg-indigo-400 rounded-full flex items-center justify-center text-xl font-bold"
               >
-                😊 Calm
+                UN
+                <!-- User Initials -->
               </div>
+              <div>
+                <div class="font-semibold">User Name</div>
+                <div class="text-xs text-white/70">
+                  Working on: stress resilience
+                </div>
+                <!-- Subtitle -->
+              </div>
+            </div>
+            <div
+              class="text-xs px-2 py-0.5 bg-white/20 rounded-full inline-block"
+            >
+              😊 Calm
+              <!-- Animated emoji placeholder would go here -->
             </div>
           </div>
 
@@ -156,9 +199,23 @@
               Modes
             </h3>
             <div class="pill-switch frosted-glass">
-              <button class="active">Guided</button>
-              <button>Reflective</button>
-              <button>Journaling</button>
+              <button
+                class="active"
+                title="AI leads the conversation with prompts and questions."
+              >
+                Guided
+              </button>
+              <!-- Tooltip -->
+              <button title="Focus on free-form writing and exploration.">
+                Reflective
+              </button>
+              <!-- Tooltip -->
+              <button
+                title="Structure your thoughts and feelings in a journal format."
+              >
+                Journaling
+              </button>
+              <!-- Tooltip -->
             </div>
           </div>
 
@@ -169,23 +226,55 @@
             <nav class="space-y-2">
               <button
                 class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                title="Your private space for notes and insights AI remembers."
+                <!--
+                Tooltip
+                --
               >
+                >
                 <span class="text-lg">🧠</span> <span>Memory Vault</span>
+                <span class="ml-auto text-white/50 text-xs"
+                  >Last updated: today</span
+                >
+                <!-- Timestamp tooltip placeholder -->
               </button>
               <button
                 class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                title="Access guided breathing exercises."
+                <!--
+                Tooltip
+                --
               >
+                >
                 <span class="text-lg">🧘</span> <span>Breathing</span>
+                <span class="ml-auto text-white/50 text-xs"
+                  >Preview available</span
+                >
+                <!-- Preview hint tooltip placeholder -->
               </button>
               <button
                 class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                title="Visualize your emotional trends over time."
+                <!--
+                Tooltip
+                --
               >
+                >
                 <span class="text-lg">📊</span> <span>Mood History</span>
+                <!-- Bar graph icon -->
               </button>
               <button
                 class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                title="Review past therapy sessions."
+                <!--
+                Tooltip
+                --
               >
+                >
                 <span class="text-lg">🗃️</span> <span>Sessions</span>
+                <!-- File cabinet icon -->
+                <span class="ml-auto text-white/50 text-xs">3 this week</span>
+                <!-- Preview hint tooltip placeholder -->
               </button>
             </nav>
           </div>
@@ -194,86 +283,187 @@
         <div class="space-y-2 border-t border-white/20 pt-4">
           <button
             class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+            title="Adjust application settings."
+            <!--
+            Tooltip
+            --
           >
-            <span class="text-lg">⚙️</span> <span>Settings</span>
+            >
+            <span class="text-xl">⚙️</span> <span>Settings</span>
+            <!-- Slightly larger icon -->
           </button>
           <button
             class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 transition-colors duration-200 hover-glow text-red-100"
+            title="Instantly hide the application interface (⌘H)."
+            <!--
+            Tooltip
+            +
+            shortcut
+            hint
+            --
           >
-            <span class="text-lg">🔒</span> <span>Quick Hide</span>
+            >
+            <span class="text-xl">🔒</span> <span>Quick Hide</span>
+            <!-- Larger icon -->
+          </button>
+          <!-- Optional Nice-to-Have: Ambient Sounds Toggle -->
+          <button
+            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+            title="Toggle ambient background sounds (e.g., rain, waves)."
+          >
+            <span class="text-xl">🎧</span> <span>Ambient Sounds</span>
           </button>
         </div>
       </aside>
 
       <main class="flex-1 flex flex-col relative">
-        <div class="flex-1 overflow-y-auto p-6 space-y-4 chat-scroll">
-          <div class="flex justify-start group fade-in">
+        <!-- Add Session Marker Example -->
+        <div
+          class="flex items-center justify-center py-4 px-6 text-xs uppercase text-white/60 font-semibold"
+        >
+          <hr class="flex-grow border-white/20 mr-3" />
+          🗓️ Monday, April 15 – Guided Mode
+          <hr class="flex-grow border-white/20 ml-3" />
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 chat-scroll">
+          <!-- AI Message Bubble -->
+          <div class="flex justify-start group fade-in-slide-up">
             <div class="max-w-lg">
+              <!-- Emotion Detection Tag -->
               <div
                 class="text-xs text-purple-300/80 mb-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
               >
-                Detected emotion: anxious
+                Emotion: anxious
               </div>
               <div
-                class="frosted-glass !bg-purple-500/10 p-3 rounded-t-xl rounded-br-xl shadow-md relative"
+                class="frosted-glass !bg-purple-500/10 py-3 px-4 rounded-t-xl rounded-br-xl shadow-md relative"
+                <!--
+                Increased
+                padding
+                --
               >
-                <p class="text-sm">
+                >
+                <p class="text-sm leading-relaxed">
+                  <!-- Added leading -->
                   Hello there. I noticed you mentioned feeling a bit overwhelmed
                   earlier. How are you feeling right now?
                 </p>
-                <span class="text-xs text-white/50 block text-right mt-1"
-                  >10:30 AM</span
-                >
+                <div class="flex justify-between items-center mt-2">
+                  <!-- Thought Process Toggle (Placeholder) -->
+                  <button
+                    class="text-xs text-white/50 hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    title="View AI thought process"
+                  >
+                    ...
+                  </button>
+                  <!-- Timestamp -->
+                  <span
+                    class="text-xs text-white/50 block ml-auto mr-1 opacity-50"
+                    <!--
+                    Reduced
+                    opacity,
+                    added
+                    margin
+                    --
+                  >
+                    >10:30 AM</span
+                  >
+                </div>
+
+                <!-- Feedback Buttons -->
                 <div
                   class="absolute -bottom-3 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                 >
                   <button
                     class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Like message"
                   >
                     👍
                   </button>
                   <button
                     class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Dislike message"
                   >
                     👎
+                  </button>
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Rephrase message"
+                  >
+                    💭
+                  </button>
+                  <button
+                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Prompt for insight"
+                  >
+                    💡
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="flex justify-start fade-in">
+          <!-- Typing Indicator Bubble -->
+          <div class="flex justify-start fade-in-slide-up">
             <div
-              class="frosted-glass !bg-purple-500/10 p-3 rounded-t-xl rounded-br-xl inline-flex items-center space-x-1"
+              class="frosted-glass !bg-purple-500/10 py-3 px-4 rounded-t-xl rounded-br-xl inline-flex items-center space-x-1"
+              <!--
+              Increased
+              padding
+              --
             >
+              >
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
             </div>
           </div>
 
-          <div class="flex justify-end group fade-in">
+          <!-- User Message Bubble -->
+          <div class="flex justify-end group fade-in-slide-up">
             <div class="max-w-lg">
               <div
-                class="frosted-glass !bg-blue-500/10 p-3 rounded-t-xl rounded-bl-xl shadow-md relative"
+                class="frosted-glass !bg-blue-500/10 py-3 px-4 rounded-t-xl rounded-bl-xl shadow-md relative"
+                <!--
+                Increased
+                padding
+                --
               >
-                <p class="text-sm">
+                >
+                <p class="text-sm leading-relaxed">
+                  <!-- Added leading -->
                   I'm still feeling a bit stressed, mostly about the upcoming
                   presentation.
                 </p>
-                <span class="text-xs text-white/50 block text-right mt-1"
-                  >10:31 AM</span
-                >
+                <div class="flex justify-end items-center mt-2">
+                  <!-- Timestamp -->
+                  <span
+                    class="text-xs text-white/50 block mr-1 opacity-50"
+                    <!--
+                    Reduced
+                    opacity,
+                    added
+                    margin
+                    --
+                  >
+                    >10:31 AM</span
+                  >
+                </div>
+
+                <!-- Feedback Buttons (User can feedback on their own message too?) -->
                 <div
                   class="absolute -bottom-3 left-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                 >
                   <button
                     class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Like message"
                   >
                     👍
                   </button>
                   <button
                     class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
+                    title="Dislike message"
                   >
                     👎
                   </button>
@@ -285,38 +475,96 @@
 
         <div class="p-4 pt-0">
           <div
-            class="w-full max-w-3xl mx-auto frosted-glass p-2 flex items-center space-x-2 shadow-lg ring-1 ring-black/5 hover-glow"
+            class="w-full max-w-3xl mx-auto frosted-glass p-2 flex items-end space-x-2 shadow-lg ring-1 ring-black/5 hover-glow"
+            <!--
+            Added
+            items-end
+            for
+            align
+            textarea
+            --
           >
+            >
             <textarea
               rows="1"
               placeholder="Type your message or / for tools..."
-              class="flex-1 bg-transparent border-none focus:ring-0 resize-none p-2 text-sm placeholder-white/50 focus-glow rounded-lg"
-              style="min-height: 40px; /* Adjust as needed */"
+              class="flex-1 bg-transparent border-none focus:ring-0 resize-none p-2 px-4 text-sm placeholder-white/50 focus-glow rounded-lg min-h-[40px] overflow-hidden"
+              <!--
+              Added
+              px-4,
+              min-height,
+              overflow-hidden
+              --
+            >
               oninput='this.style.height = "";this.style.height = this.scrollHeight + "px"'
-            ></textarea>
+              title="Your message input area. Use / for commands." <!-- Tooltip -->
+            ></textarea
+            >
             <button
               class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
-              title="Mood"
+              title="Mood Check-in"
+              <!--
+              Tooltip
+              --
             >
+              >
               <span class="text-xl">🌤️</span>
             </button>
             <button
               class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
-              title="Mode Switch"
+              title="Change Therapy Mode"
+              <!--
+              Tooltip
+              --
             >
+              >
               <span class="text-xl">🎯</span>
             </button>
             <button
               class="p-2 rounded-lg bg-indigo-500/30 hover:bg-indigo-500/50 transition-colors duration-200 hover-glow"
               title="Voice Input"
+              <!--
+              Tooltip
+              --
             >
+              >
               <span class="text-xl">🎤</span>
+              <!-- Optional Nice-to-Have: Voice Entry Preview -->
+              <!-- <div class="absolute inset-0 flex items-center justify-center">
+                   <div class="w-10 h-10 rounded-full bg-blue-500/50 animate-pulse"></div>
+              </div> -->
+            </button>
+            <!-- Send Button -->
+            <button
+              class="p-2 rounded-lg bg-green-500/30 hover:bg-green-500/50 transition-colors duration-200 hover-glow"
+              title="Send Message (Enter)"
+            >
+              <!-- Simple Arrow Icon (using SVG or simple character) -->
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M14 5l7 7m0 0l-7 7m7-7H3"
+                />
+              </svg>
+              <!-- Alternative: Paper Plane Icon -->
+              <!-- <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                 </svg> -->
             </button>
           </div>
         </div>
       </main>
     </div>
 
+    <!-- Memory Vault Modal -->
     <div
       id="memoryVaultModal"
       class="fixed inset-0 bg-black/30 flex items-center justify-center p-8 hidden z-50"
@@ -330,7 +578,8 @@
         >
           <p class="text-sm text-white/80 mb-2">What I know about you:</p>
           <textarea
-            class="w-full h-40 bg-transparent border border-white/20 rounded-lg p-2 text-sm focus-glow"
+            class="w-full h-40 bg-transparent border border-white/20 rounded-lg p-2 text-sm focus-glow resize-none"
+            placeholder="Your personal insights stored here..."
           >
 You mentioned feeling anxious about presentations.
 You enjoy spending time in nature.
@@ -346,35 +595,106 @@ Your goal is to manage stress more effectively.</textarea
       </div>
     </div>
 
+    <!-- Quick Hide Overlay -->
     <div
       id="quickHideOverlay"
-      class="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-center justify-center text-4xl font-bold text-white/50 hidden z-50"
+      class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl flex items-center justify-center text-4xl font-bold text-white/50 hidden z-50"
     >
-      Paused 🔒
+      <span class="quick-hide-text">Paused 🔒</span>
+      <!-- Added span for animation -->
     </div>
 
     <script>
       // Example: Show Memory Vault (Connect this to the sidebar button)
-      // document.querySelector('button:contains("Memory Vault")').addEventListener('click', () => {
-      //     document.getElementById('memoryVaultModal').classList.remove('hidden');
-      // });
+      const memoryVaultButton = document.querySelector(
+        'aside button[title*="Memory Vault"]'
+      );
+      if (memoryVaultButton) {
+        memoryVaultButton.addEventListener("click", () => {
+          document
+            .getElementById("memoryVaultModal")
+            .classList.remove("hidden");
+        });
+      }
 
-      // Example: Quick Hide (Connect this to the sidebar button)
-      // document.querySelector('button:contains("Quick Hide")').addEventListener('click', () => {
-      //     document.getElementById('quickHideOverlay').classList.remove('hidden');
-      //     // Add logic to re-show later
-      // });
+      // Example: Quick Hide (Connect this to the sidebar button and maybe a keyboard shortcut)
+      const quickHideButton = document.querySelector(
+        'aside button[title*="Quick Hide"]'
+      );
+      const quickHideOverlay = document.getElementById("quickHideOverlay");
+
+      if (quickHideButton && quickHideOverlay) {
+        quickHideButton.addEventListener("click", () => {
+          quickHideOverlay.classList.remove("hidden");
+          // In a real app, you'd need a way to bring it back (e.g., specific key combo, timer)
+          console.log("Quick Hide Activated. Implement reactivation logic.");
+        });
+
+        // Optional: Add keyboard shortcut listener (e.g., Cmd+H or Ctrl+H)
+        document.addEventListener("keydown", (event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "h") {
+            event.preventDefault(); // Prevent default browser hide
+            if (quickHideOverlay.classList.contains("hidden")) {
+              quickHideOverlay.classList.remove("hidden");
+              console.log("Quick Hide Activated via shortcut.");
+            } else {
+              quickHideOverlay.classList.add("hidden");
+              console.log("Quick Hide Deactivated via shortcut.");
+            }
+          }
+          // Allow escape to close overlay if active
+          if (
+            event.key === "Escape" &&
+            !quickHideOverlay.classList.contains("hidden")
+          ) {
+            quickHideOverlay.classList.add("hidden");
+            console.log("Quick Hide Deactivated via Escape.");
+          }
+        });
+
+        // Simple click on overlay to dismiss (for demo purposes)
+        quickHideOverlay.addEventListener("click", () => {
+          quickHideOverlay.classList.add("hidden");
+          console.log("Quick Hide Deactivated via click.");
+        });
+      }
 
       // Add auto-grow for textarea
       const textarea = document.querySelector("textarea");
-      textarea.addEventListener("input", () => {
-        textarea.style.height = "auto"; // Reset height
-        textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
-      });
+      if (textarea) {
+        textarea.addEventListener("input", () => {
+          textarea.style.height = "auto"; // Reset height
+          textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
+          // Optional: Limit max height if needed before adding scrollbar
+          // if (textarea.scrollHeight > 200) { // Example max height
+          //   textarea.style.overflowY = 'auto';
+          //   textarea.style.height = '200px';
+          // } else {
+          //   textarea.style.overflowY = 'hidden';
+          // }
+        });
+        // Set initial height on load
+        textarea.style.height = "auto";
+        textarea.style.height = `${textarea.scrollHeight}px`;
+      }
 
-      // Placeholder for blur on inactive tab (Requires more complex JS)
+      // Placeholder for blur on inactive tab (Requires more complex JS/Browser API)
       // window.addEventListener('blur', () => { document.body.classList.add('backdrop-blur-sm'); });
       // window.addEventListener('focus', () => { document.body.classList.remove('backdrop-blur-sm'); });
+
+      // Placeholder for / command hinting in textarea (Requires JS to detect '/' and show dropdown)
+      if (textarea) {
+        textarea.addEventListener("input", (event) => {
+          const value = event.target.value;
+          if (value.endsWith("/") && value.split("/").pop() === "") {
+            console.log('Detected "/" command start. Show tool list.');
+            // Implement dropdown logic here
+          }
+          // Basic auto-grow as well
+          textarea.style.height = "auto";
+          textarea.style.height = `${textarea.scrollHeight}px`;
+        });
+      }
     </script>
   </body>
 </html>
