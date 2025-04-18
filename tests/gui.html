@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Therapist</title>
+    <title>AI Therapist - Enhanced Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,39 +11,43 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <!-- Heroicons for send icon -->
+    <!-- Material Symbols Outlined Font -->
     <link
-      href="https://cdn.jsdelivr.net/npm/@heroicons/vue@1.0.4/dist/heroicons.min.css"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
       rel="stylesheet"
     />
 
     <style>
       /* Custom styles */
+      :root {
+        scroll-behavior: smooth; /* Enable smooth scrolling */
+      }
+
       body {
         font-family: "Inter", sans-serif;
-        /* Apply a more complex gradient background */
-        background: linear-gradient(
-          135deg,
-          #4f46e5 0%,
-          #3b0764 20%,
-          #1e1b4b 50%,
-          #083344 80%,
-          #0e7490 100%
-        );
+        /* Updated gradient background */
+        background: radial-gradient(
+            ellipse at bottom left,
+            #4f46e5 10%,
+            #1e1b4b 50%,
+            #083344 90%
+          ),
+          linear-gradient(160deg, #0e7490 0%, #3b0764 100%);
+        background-blend-mode: screen; /* Blend the gradients */
         min-height: 100vh;
         overflow: hidden; /* Prevent scrolling of the main body */
       }
 
       /* Helper class for frosted glass effect */
       .frosted-glass {
-        backdrop-filter: blur(16px); /* backdrop-blur-md */
-        -webkit-backdrop-filter: blur(16px); /* Safari support */
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%); /* Safari support */
         background-color: rgba(255, 255, 255, 0.1); /* bg-white/10 */
-        border: 1px solid rgba(255, 255, 255, 0.3); /* border border-white/30 */
+        border: 1px solid rgba(255, 255, 255, 0.2); /* Slightly less prominent border */
         border-radius: 1rem; /* rounded-2xl */
       }
 
-      /* Custom scrollbar for chat (optional but nice) */
+      /* Custom scrollbar for chat */
       .chat-scroll::-webkit-scrollbar {
         width: 6px;
       }
@@ -54,10 +58,14 @@
         background-color: rgba(255, 255, 255, 0.3);
         border-radius: 3px;
       }
+      .chat-scroll::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.5);
+      }
 
-      /* Simple glow effect on hover */
-      .hover-glow:hover {
-        box-shadow: 0 0 15px 2px rgba(199, 210, 254, 0.5); /* Example glow - adjust color/intensity */
+      /* Glow effect on hover for interactive elements */
+      .hover-glow:hover:not(:focus-within) {
+        /* Avoid double glow on focus */
+        box-shadow: 0 0 15px 2px rgba(199, 210, 254, 0.5);
         transition: box-shadow 0.3s ease-in-out;
       }
 
@@ -66,15 +74,10 @@
         display: inline-flex;
         border-radius: 9999px; /* rounded-full */
         padding: 0.25rem; /* p-1 */
-        background-color: rgba(
-          0,
-          0,
-          0,
-          0.2
-        ); /* Darker background for contrast */
+        background-color: rgba(0, 0, 0, 0.2);
       }
       .pill-switch button {
-        padding: 0.25rem 0.75rem; /* py-1 px-3 */
+        padding: 0.375rem 1rem; /* py-1.5 px-4 for better touch */
         border-radius: 9999px; /* rounded-full */
         font-size: 0.875rem; /* text-sm */
         font-weight: 500; /* font-medium */
@@ -82,22 +85,23 @@
         transition: all 0.3s ease-in-out;
       }
       .pill-switch button.active {
-        background-color: rgba(
-          255,
-          255,
-          255,
-          0.3
-        ); /* bg-white/30 - slightly more opaque */
+        background-color: rgba(255, 255, 255, 0.25); /* bg-white/25 */
         color: white;
-        box-shadow: 0 0 8px 1px rgba(199, 210, 254, 0.4); /* Soft glow */
-        /* Added subtle scale for active */
-        transform: scale(1.05);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1),
+          0 0 8px 1px rgba(199, 210, 254, 0.3); /* Subtle glow + shadow */
+        transform: scale(1.03); /* Slight scale up */
       }
 
-      /* Subtle outline glow on focus */
-      .focus-glow:focus {
+      /* Focus glow effect (Tailwind focus:ring equivalent) */
+      .focus-glow:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 3px rgba(165, 180, 252, 0.4); /* Example focus ring - adjust color/intensity */
+        box-shadow: 0 0 0 3px rgba(165, 180, 252, 0.4); /* Example focus ring */
+      }
+      /* Input bar focus glow */
+      .input-bar-focus:focus-within {
+        box-shadow: 0 0 0 2px rgba(165, 180, 252, 0.4),
+          0 0 15px 2px rgba(199, 210, 254, 0.3);
+        transition: box-shadow 0.2s ease-in-out;
       }
 
       /* Typing indicator animation */
@@ -121,17 +125,19 @@
         80%,
         100% {
           opacity: 0.3;
+          transform: scale(0.8);
         }
         40% {
           opacity: 1;
+          transform: scale(1);
         }
       }
 
-      /* Fade-in and slight slide-up animation */
+      /* Fade-in and slight slide-up animation for chat bubbles */
       @keyframes fadeInSlideUp {
         from {
           opacity: 0;
-          transform: translateY(5px);
+          transform: translateY(8px);
         }
         to {
           opacity: 1;
@@ -139,10 +145,14 @@
         }
       }
       .fade-in-slide-up {
-        animation: fadeInSlideUp 0.4s ease-out forwards;
+        animation: fadeInSlideUp 0.5s ease-out forwards;
+      }
+      /* Stagger animation for realism (apply with JS) */
+      .fade-in-slide-up:nth-child(odd) {
+        animation-delay: 0.1s;
       }
 
-      /* Quick Hide animation placeholder */
+      /* Quick Hide lock pulsate animation */
       @keyframes pulsateLock {
         0% {
           transform: scale(1);
@@ -157,248 +167,313 @@
           opacity: 0.8;
         }
       }
-      .quick-hide-text span {
+      .pulsating-lock .material-symbols-outlined {
         animation: pulsateLock 1.5s infinite ease-in-out;
+      }
+
+      /* Material Symbols icon base style */
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24; /* Default style */
+        font-size: 20px; /* Default size */
+        vertical-align: middle; /* Align icons with text */
+        line-height: 1; /* Prevent extra space */
+      }
+
+      /* Tooltip styling (basic, enhance with JS library if needed) */
+      [title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(-5px);
+        padding: 4px 8px;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        font-size: 12px;
+        border-radius: 4px;
+        white-space: nowrap;
+        z-index: 10;
+      }
+
+      /* Utility for icon buttons */
+      .icon-button {
+        @apply p-2 rounded-lg transition-all duration-200 ease-in-out hover:bg-white/10 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-opacity-75;
+      }
+      .icon-button .material-symbols-outlined {
+        @apply text-white/80 group-hover:text-white transition-colors;
       }
     </style>
   </head>
   <body class="text-white tracking-wide">
+    <!-- Responsive Considerations (Commented Out):
+      - On small screens (< md breakpoint), the sidebar should hide.
+      - A hamburger button should appear to toggle the sidebar.
+      - The main chat area should take full width.
+      - Input bar sticks to the bottom.
+      - Use responsive text sizes (e.g., text-sm md:text-base).
+    -->
     <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
       <aside
-        class="w-64 p-4 space-y-6 frosted-glass !rounded-none !border-r !border-l-0 !border-t-0 !border-b-0 flex flex-col justify-between hover-glow transition-shadow duration-300 ease-in-out"
+        class="w-64 p-4 space-y-6 frosted-glass !rounded-none !border-r !border-l-0 !border-t-0 !border-b-0 border-white/20 flex flex-col justify-between"
+        aria-label="Sidebar Navigation and Tools"
       >
         <div class="space-y-6">
+          <!-- User Profile Block -->
           <div
-            class="space-y-2 p-2 rounded-lg border border-white/20 bg-white/5 hover-glow"
+            class="space-y-2 p-3 rounded-lg border border-white/10 bg-white/5 hover-glow"
           >
             <div class="flex items-center space-x-3">
               <div
-                class="w-10 h-10 bg-indigo-400 rounded-full flex items-center justify-center text-xl font-bold"
+                class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-lg font-medium text-white"
+                aria-label="User Initials"
               >
                 UN
-                <!-- User Initials -->
               </div>
               <div>
-                <div class="font-semibold">User Name</div>
-                <div class="text-xs text-white/70">
+                <div class="font-semibold text-base">User Name</div>
+                <div class="text-xs text-white/70 font-light">
                   Working on: stress resilience
                 </div>
-                <!-- Subtitle -->
               </div>
-            </div>
-            <div
-              class="text-xs px-2 py-0.5 bg-white/20 rounded-full inline-block"
-            >
-              😊 Calm
-              <!-- Animated emoji placeholder would go here -->
+              <!-- Status Icon (Example: Spa) -->
+              <span
+                class="material-symbols-outlined text-teal-300 ml-auto"
+                title="Current State: Calm"
+                aria-label="Current State: Calm"
+                >spa</span
+              >
             </div>
           </div>
 
-          <div>
-            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2">
+          <!-- Modes Section -->
+          <div class="space-y-2">
+            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2 px-1">
               Modes
             </h3>
-            <div class="pill-switch frosted-glass">
+            <div class="pill-switch frosted-glass !border-none">
               <button
                 class="active"
                 title="AI leads the conversation with prompts and questions."
+                aria-pressed="true"
               >
                 Guided
               </button>
-              <!-- Tooltip -->
-              <button title="Focus on free-form writing and exploration.">
+              <button
+                title="Focus on free-form writing and exploration."
+                aria-pressed="false"
+              >
                 Reflective
               </button>
-              <!-- Tooltip -->
               <button
                 title="Structure your thoughts and feelings in a journal format."
+                aria-pressed="false"
               >
                 Journaling
               </button>
-              <!-- Tooltip -->
             </div>
           </div>
 
-          <div>
-            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2">
-              Tools
+          <!-- Tools Section -->
+          <div class="space-y-3">
+            <h3 class="text-xs uppercase text-white/50 font-semibold mb-2 px-1">
+              Wellness Tools
             </h3>
-            <nav class="space-y-2">
+            <nav class="space-y-1">
               <button
-                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
-                title="Your private space for notes and insights AI remembers."
-                <!--
-                Tooltip
-                --
-              >
-                >
-                <span class="text-lg">🧠</span> <span>Memory Vault</span>
-                <span class="ml-auto text-white/50 text-xs"
-                  >Last updated: today</span
-                >
-                <!-- Timestamp tooltip placeholder -->
-              </button>
-              <button
-                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+                aria-label="Access guided breathing exercises"
                 title="Access guided breathing exercises."
-                <!--
-                Tooltip
-                --
               >
+                <span class="material-symbols-outlined icon-button !p-0"
+                  >air</span
                 >
-                <span class="text-lg">🧘</span> <span>Breathing</span>
-                <span class="ml-auto text-white/50 text-xs"
+                <span class="text-sm font-medium text-white/90">Breathing</span>
+                <span
+                  class="ml-auto text-xs text-white/60 font-light group-hover:text-white/80 transition-colors"
                   >Preview available</span
                 >
-                <!-- Preview hint tooltip placeholder -->
               </button>
               <button
-                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+                aria-label="Toggle ambient background sounds"
+                title="Toggle ambient background sounds (e.g., rain, waves)."
+              >
+                <span class="material-symbols-outlined icon-button !p-0"
+                  >headphones</span
+                >
+                <span class="text-sm font-medium text-white/90"
+                  >Ambient Sounds</span
+                >
+              </button>
+            </nav>
+
+            <h3
+              class="text-xs uppercase text-white/50 font-semibold mb-2 px-1 pt-2"
+            >
+              Insights
+            </h3>
+            <nav class="space-y-1">
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+                aria-label="Access the Memory Vault"
+                title="Your private space for notes and insights AI remembers."
+                onclick="document.getElementById('memoryVaultModal').classList.remove('hidden');"
+              >
+                <span class="material-symbols-outlined icon-button !p-0"
+                  >psychology_alt</span
+                >
+                <span class="text-sm font-medium text-white/90"
+                  >Memory Vault</span
+                >
+                <span
+                  class="ml-auto text-xs text-white/60 font-light group-hover:text-white/80 transition-colors"
+                  >Updated today</span
+                >
+              </button>
+              <button
+                class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+                aria-label="View Mood History"
                 title="Visualize your emotional trends over time."
-                <!--
-                Tooltip
-                --
               >
+                <span class="material-symbols-outlined icon-button !p-0"
+                  >bar_chart</span
                 >
-                <span class="text-lg">📊</span> <span>Mood History</span>
-                <!-- Bar graph icon -->
+                <span class="text-sm font-medium text-white/90"
+                  >Mood History</span
+                >
               </button>
               <button
-                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+                class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+                aria-label="Review past sessions"
                 title="Review past therapy sessions."
-                <!--
-                Tooltip
-                --
               >
+                <span class="material-symbols-outlined icon-button !p-0"
+                  >history</span
                 >
-                <span class="text-lg">🗃️</span> <span>Sessions</span>
-                <!-- File cabinet icon -->
-                <span class="ml-auto text-white/50 text-xs">3 this week</span>
-                <!-- Preview hint tooltip placeholder -->
+                <span class="text-sm font-medium text-white/90">Sessions</span>
+                <span
+                  class="ml-auto text-xs text-white/60 font-light group-hover:text-white/80 transition-colors"
+                  >3 this week</span
+                >
               </button>
             </nav>
           </div>
         </div>
 
+        <!-- Bottom Control Strip -->
         <div class="space-y-2 border-t border-white/20 pt-4">
           <button
-            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+            class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors duration-200 focus-glow group"
+            aria-label="Settings"
             title="Adjust application settings."
-            <!--
-            Tooltip
-            --
           >
+            <span class="material-symbols-outlined icon-button !p-0"
+              >settings</span
             >
-            <span class="text-xl">⚙️</span> <span>Settings</span>
-            <!-- Slightly larger icon -->
+            <span class="text-sm font-medium text-white/90">Settings</span>
           </button>
           <button
-            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 transition-colors duration-200 hover-glow text-red-100"
-            title="Instantly hide the application interface (⌘H)."
-            <!--
-            Tooltip
-            +
-            shortcut
-            hint
-            --
+            class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 transition-colors duration-200 focus-glow group"
+            aria-label="Quick Hide Application"
+            title="Instantly hide the application interface (⌘H / Ctrl+H)."
+            onclick="document.getElementById('quickHideOverlay').classList.remove('hidden');"
           >
+            <span
+              class="material-symbols-outlined icon-button !p-0 text-red-200 group-hover:text-red-100"
+              >visibility_off</span
             >
-            <span class="text-xl">🔒</span> <span>Quick Hide</span>
-            <!-- Larger icon -->
-          </button>
-          <!-- Optional Nice-to-Have: Ambient Sounds Toggle -->
-          <button
-            class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
-            title="Toggle ambient background sounds (e.g., rain, waves)."
-          >
-            <span class="text-xl">🎧</span> <span>Ambient Sounds</span>
+            <span class="text-sm font-medium text-red-100">Quick Hide</span>
+            <span
+              class="ml-auto text-xs text-red-200/70 group-hover:text-red-100/90 transition-colors"
+              >⌘H</span
+            >
           </button>
         </div>
       </aside>
 
-      <main class="flex-1 flex flex-col relative">
-        <!-- Add Session Marker Example -->
+      <!-- Main Chat Area -->
+      <main
+        class="flex-1 flex flex-col relative bg-gradient-to-br from-slate-900/30 via-transparent to-transparent"
+      >
+        <!-- Session Marker -->
         <div
-          class="flex items-center justify-center py-4 px-6 text-xs uppercase text-white/60 font-semibold"
+          class="flex items-center justify-center py-3 px-6 text-xs uppercase text-white/60 font-semibold sticky top-0 z-10 backdrop-blur-sm bg-black/10"
         >
-          <hr class="flex-grow border-white/20 mr-3" />
-          🗓️ Monday, April 15 – Guided Mode
-          <hr class="flex-grow border-white/20 ml-3" />
+          <hr class="flex-grow border-white/10 mr-3" />
+          <span class="material-symbols-outlined !text-sm !font-light mr-1.5"
+            >calendar_month</span
+          >
+          Monday, April 15 – Guided Mode
+          <hr class="flex-grow border-white/10 ml-3" />
         </div>
 
+        <!-- Chat Messages -->
         <div class="flex-1 overflow-y-auto p-6 space-y-6 chat-scroll">
           <!-- AI Message Bubble -->
           <div class="flex justify-start group fade-in-slide-up">
-            <div class="max-w-lg">
-              <!-- Emotion Detection Tag -->
-              <div
-                class="text-xs text-purple-300/80 mb-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              >
-                Emotion: anxious
+            <div class="max-w-xl">
+              <!-- Increased max-width -->
+              <!-- Emotion Tag -->
+              <div class="ml-2 mb-1">
+                <span
+                  class="text-[10px] px-1.5 py-0.5 rounded-full frosted-glass !bg-purple-500/20 !border-purple-400/30 text-purple-200/90 font-medium"
+                >
+                  Emotion: anxious
+                </span>
               </div>
               <div
-                class="frosted-glass !bg-purple-500/10 py-3 px-4 rounded-t-xl rounded-br-xl shadow-md relative"
-                <!--
-                Increased
-                padding
-                --
+                class="frosted-glass !bg-purple-600/10 py-3 px-4 rounded-t-xl rounded-br-xl shadow-md relative group"
+                aria-label="AI Message"
               >
-                >
-                <p class="text-sm leading-relaxed">
-                  <!-- Added leading -->
+                <p class="text-sm leading-relaxed text-white/95">
+                  <!-- Increased leading -->
                   Hello there. I noticed you mentioned feeling a bit overwhelmed
                   earlier. How are you feeling right now?
                 </p>
-                <div class="flex justify-between items-center mt-2">
-                  <!-- Thought Process Toggle (Placeholder) -->
+                <!-- Timestamp & Feedback container -->
+                <div class="flex justify-end items-center mt-2 space-x-2">
+                  <!-- Thought Process Button (Placeholder) -->
                   <button
-                    class="text-xs text-white/50 hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    title="View AI thought process"
+                    class="text-xs text-white/50 hover:text-white/80 transition-opacity duration-300 opacity-0 group-hover:opacity-100 focus-glow rounded-full p-0.5"
+                    title="View AI reasoning"
                   >
-                    ...
+                    <span class="material-symbols-outlined !text-base"
+                      >psychology_alt</span
+                    >
                   </button>
+
+                  <!-- Feedback Buttons -->
+                  <div
+                    class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  >
+                    <button
+                      class="icon-button !p-1"
+                      title="Like message"
+                      aria-label="Like message"
+                    >
+                      <span class="material-symbols-outlined !text-sm"
+                        >thumb_up</span
+                      >
+                    </button>
+                    <button
+                      class="icon-button !p-1"
+                      title="Dislike message"
+                      aria-label="Dislike message"
+                    >
+                      <span class="material-symbols-outlined !text-sm"
+                        >thumb_down</span
+                      >
+                    </button>
+                    <!-- Add Rephrase/Insight buttons here if needed -->
+                  </div>
+
                   <!-- Timestamp -->
                   <span
-                    class="text-xs text-white/50 block ml-auto mr-1 opacity-50"
-                    <!--
-                    Reduced
-                    opacity,
-                    added
-                    margin
-                    --
-                  >
+                    class="text-xs text-white/60 block self-end"
+                    aria-label="Timestamp"
                     >10:30 AM</span
                   >
-                </div>
-
-                <!-- Feedback Buttons -->
-                <div
-                  class="absolute -bottom-3 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Like message"
-                  >
-                    👍
-                  </button>
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Dislike message"
-                  >
-                    👎
-                  </button>
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Rephrase message"
-                  >
-                    💭
-                  </button>
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Prompt for insight"
-                  >
-                    💡
-                  </button>
                 </div>
               </div>
             </div>
@@ -407,13 +482,9 @@
           <!-- Typing Indicator Bubble -->
           <div class="flex justify-start fade-in-slide-up">
             <div
-              class="frosted-glass !bg-purple-500/10 py-3 px-4 rounded-t-xl rounded-br-xl inline-flex items-center space-x-1"
-              <!--
-              Increased
-              padding
-              --
+              class="frosted-glass !bg-purple-600/10 py-3 px-4 rounded-t-xl rounded-br-xl inline-flex items-center space-x-1 shadow-md"
+              aria-label="AI is typing"
             >
-              >
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
               <span class="typing-dot"></span>
@@ -422,143 +493,124 @@
 
           <!-- User Message Bubble -->
           <div class="flex justify-end group fade-in-slide-up">
-            <div class="max-w-lg">
+            <div class="max-w-xl">
+              <!-- Increased max-width -->
               <div
-                class="frosted-glass !bg-blue-500/10 py-3 px-4 rounded-t-xl rounded-bl-xl shadow-md relative"
-                <!--
-                Increased
-                padding
-                --
+                class="frosted-glass !bg-indigo-600/10 py-3 px-4 rounded-t-xl rounded-bl-xl shadow-md relative group"
+                aria-label="User Message"
               >
-                >
-                <p class="text-sm leading-relaxed">
-                  <!-- Added leading -->
+                <p class="text-sm leading-relaxed text-white/95">
+                  <!-- Increased leading -->
                   I'm still feeling a bit stressed, mostly about the upcoming
                   presentation.
                 </p>
-                <div class="flex justify-end items-center mt-2">
+                <!-- Timestamp & Feedback container -->
+                <div class="flex justify-end items-center mt-2 space-x-2">
+                  <!-- Feedback (Optional for user messages) -->
+                  <div
+                    class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  >
+                    <button
+                      class="icon-button !p-1"
+                      title="Mark as helpful"
+                      aria-label="Mark as helpful"
+                    >
+                      <span class="material-symbols-outlined !text-sm"
+                        >thumb_up</span
+                      >
+                    </button>
+                    <button
+                      class="icon-button !p-1"
+                      title="Mark as unhelpful"
+                      aria-label="Mark as unhelpful"
+                    >
+                      <span class="material-symbols-outlined !text-sm"
+                        >thumb_down</span
+                      >
+                    </button>
+                  </div>
                   <!-- Timestamp -->
                   <span
-                    class="text-xs text-white/50 block mr-1 opacity-50"
-                    <!--
-                    Reduced
-                    opacity,
-                    added
-                    margin
-                    --
-                  >
+                    class="text-xs text-white/60 block self-end"
+                    aria-label="Timestamp"
                     >10:31 AM</span
                   >
-                </div>
-
-                <!-- Feedback Buttons (User can feedback on their own message too?) -->
-                <div
-                  class="absolute -bottom-3 left-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Like message"
-                  >
-                    👍
-                  </button>
-                  <button
-                    class="text-xs bg-white/20 rounded-full px-1.5 py-0.5 hover:bg-white/40"
-                    title="Dislike message"
-                  >
-                    👎
-                  </button>
                 </div>
               </div>
             </div>
           </div>
+          <!-- Add more messages here -->
         </div>
 
-        <div class="p-4 pt-0">
+        <!-- Input Bar -->
+        <div class="p-4 pt-2">
           <div
-            class="w-full max-w-3xl mx-auto frosted-glass p-2 flex items-end space-x-2 shadow-lg ring-1 ring-black/5 hover-glow"
-            <!--
-            Added
-            items-end
-            for
-            align
-            textarea
-            --
+            class="w-full max-w-3xl mx-auto frosted-glass p-2 flex items-end space-x-2 shadow-lg input-bar-focus rounded-xl"
+            aria-label="Message Input Area"
           >
-            >
             <textarea
+              id="messageInput"
               rows="1"
-              placeholder="Type your message or / for tools..."
-              class="flex-1 bg-transparent border-none focus:ring-0 resize-none p-2 px-4 text-sm placeholder-white/50 focus-glow rounded-lg min-h-[40px] overflow-hidden"
-              <!--
-              Added
-              px-4,
-              min-height,
-              overflow-hidden
-              --
-            >
-              oninput='this.style.height = "";this.style.height = this.scrollHeight + "px"'
-              title="Your message input area. Use / for commands." <!-- Tooltip -->
-            ></textarea
-            >
+              placeholder="Type your message or use / for tools..."
+              class="flex-1 bg-transparent border-none focus:ring-0 resize-none py-2 px-3 text-sm placeholder-white/50 focus-glow rounded-lg min-h-[44px] max-h-[150px] overflow-y-auto"
+              aria-label="Message Input"
+              oninput='this.style.height = "";this.style.height = this.scrollHeight + "px"; checkSlashCommand(this.value);'
+            ></textarea>
             <button
-              class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              class="icon-button group"
               title="Mood Check-in"
-              <!--
-              Tooltip
-              --
+              aria-label="Mood Check-in"
             >
-              >
-              <span class="text-xl">🌤️</span>
+              <span class="material-symbols-outlined">sentiment_satisfied</span>
             </button>
             <button
-              class="p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 hover-glow"
+              class="icon-button group"
               title="Change Therapy Mode"
-              <!--
-              Tooltip
-              --
+              aria-label="Change Therapy Mode"
             >
-              >
-              <span class="text-xl">🎯</span>
+              <span class="material-symbols-outlined">tune</span>
+              <!-- Alternative: 'adjust' or 'target' -->
             </button>
             <button
-              class="p-2 rounded-lg bg-indigo-500/30 hover:bg-indigo-500/50 transition-colors duration-200 hover-glow"
+              class="icon-button group bg-indigo-500/30 hover:bg-indigo-500/50"
               title="Voice Input"
-              <!--
-              Tooltip
-              --
+              aria-label="Voice Input"
             >
-              >
-              <span class="text-xl">🎤</span>
-              <!-- Optional Nice-to-Have: Voice Entry Preview -->
-              <!-- <div class="absolute inset-0 flex items-center justify-center">
-                   <div class="w-10 h-10 rounded-full bg-blue-500/50 animate-pulse"></div>
-              </div> -->
+              <span class="material-symbols-outlined">mic</span>
             </button>
             <!-- Send Button -->
             <button
-              class="p-2 rounded-lg bg-green-500/30 hover:bg-green-500/50 transition-colors duration-200 hover-glow"
+              class="icon-button group bg-teal-500/30 hover:bg-teal-500/50"
               title="Send Message (Enter)"
+              aria-label="Send Message"
             >
-              <!-- Simple Arrow Icon (using SVG or simple character) -->
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M14 5l7 7m0 0l-7 7m7-7H3"
-                />
-              </svg>
-              <!-- Alternative: Paper Plane Icon -->
-              <!-- <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                 </svg> -->
+              <span class="material-symbols-outlined text-teal-100">send</span>
             </button>
+          </div>
+          <!-- Command Hint Dropdown (Hidden by default) -->
+          <div
+            id="commandHint"
+            class="absolute bottom-full left-0 right-0 mb-2 w-full max-w-3xl mx-auto hidden"
+          >
+            <div
+              class="frosted-glass p-2 rounded-lg shadow-xl max-h-40 overflow-y-auto"
+            >
+              <button
+                class="block w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-sm"
+              >
+                /memory Add insight...
+              </button>
+              <button
+                class="block w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-sm"
+              >
+                /mood Set current mood...
+              </button>
+              <button
+                class="block w-full text-left px-3 py-1.5 rounded hover:bg-white/10 text-sm"
+              >
+                /breathing Start exercise
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -567,30 +619,54 @@
     <!-- Memory Vault Modal -->
     <div
       id="memoryVaultModal"
-      class="fixed inset-0 bg-black/30 flex items-center justify-center p-8 hidden z-50"
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 hidden z-50"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="memoryVaultTitle"
     >
       <div
-        class="w-full max-w-2xl h-3/4 frosted-glass p-6 rounded-2xl shadow-2xl flex flex-col"
+        class="w-full max-w-2xl h-[75vh] frosted-glass p-6 rounded-2xl shadow-2xl flex flex-col"
       >
-        <h2 class="text-2xl font-semibold mb-4">🧠 Memory Vault</h2>
-        <div
-          class="flex-1 overflow-y-auto bg-white/5 p-4 rounded-lg mb-4 chat-scroll"
-        >
-          <p class="text-sm text-white/80 mb-2">What I know about you:</p>
-          <textarea
-            class="w-full h-40 bg-transparent border border-white/20 rounded-lg p-2 text-sm focus-glow resize-none"
-            placeholder="Your personal insights stored here..."
+        <div class="flex justify-between items-center mb-4">
+          <h2
+            id="memoryVaultTitle"
+            class="text-2xl font-semibold flex items-center gap-2"
           >
-You mentioned feeling anxious about presentations.
-You enjoy spending time in nature.
-Your goal is to manage stress more effectively.</textarea
+            <span class="material-symbols-outlined !text-2xl"
+              >psychology_alt</span
+            >
+            Memory Vault
+          </h2>
+          <button
+            onclick="document.getElementById('memoryVaultModal').classList.add('hidden')"
+            class="icon-button !p-1.5"
+            aria-label="Close Memory Vault"
+          >
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div
+          class="flex-1 overflow-y-auto bg-black/10 border border-white/10 p-4 rounded-lg mb-4 chat-scroll"
+        >
+          <label for="memoryContent" class="text-sm text-white/80 mb-2 block"
+            >What I know about you:</label
+          >
+          <textarea
+            id="memoryContent"
+            class="w-full min-h-[200px] bg-transparent border border-white/20 rounded-lg p-3 text-sm focus-glow resize-none leading-relaxed"
+            placeholder="Your personal insights and key memories stored here..."
+            aria-label="Memory Vault Content"
+          >
+You mentioned feeling anxious about presentations, especially the upcoming one.
+You find spending time in nature calming and restorative.
+Your primary goal shared with me is to manage stress more effectively and build resilience.</textarea
           >
         </div>
         <button
           onclick="document.getElementById('memoryVaultModal').classList.add('hidden')"
-          class="self-end px-4 py-2 bg-indigo-500/50 hover:bg-indigo-500/70 rounded-lg transition-colors duration-200"
+          class="self-end px-5 py-2 bg-indigo-500/60 hover:bg-indigo-500/80 rounded-lg transition-colors duration-200 text-sm font-medium focus-glow"
         >
-          Close
+          Save & Close
         </button>
       </div>
     </div>
@@ -598,51 +674,73 @@ Your goal is to manage stress more effectively.</textarea
     <!-- Quick Hide Overlay -->
     <div
       id="quickHideOverlay"
-      class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl flex items-center justify-center text-4xl font-bold text-white/50 hidden z-50"
+      class="fixed inset-0 bg-slate-900/95 backdrop-blur-xl flex items-center justify-center text-4xl font-bold text-white/60 hidden z-[100]"
+      aria-hidden="true"
     >
-      <span class="quick-hide-text">Paused 🔒</span>
-      <!-- Added span for animation -->
+      <span class="flex items-center gap-3 pulsating-lock">
+        Paused <span class="material-symbols-outlined !text-4xl">lock</span>
+      </span>
     </div>
 
     <script>
-      // Example: Show Memory Vault (Connect this to the sidebar button)
-      const memoryVaultButton = document.querySelector(
-        'aside button[title*="Memory Vault"]'
-      );
-      if (memoryVaultButton) {
-        memoryVaultButton.addEventListener("click", () => {
-          document
-            .getElementById("memoryVaultModal")
-            .classList.remove("hidden");
+      const textarea = document.getElementById("messageInput");
+      const commandHint = document.getElementById("commandHint");
+
+      // Auto-grow textarea
+      if (textarea) {
+        const setHeight = () => {
+          textarea.style.height = "auto"; // Reset height
+          // Calculate scroll height but prevent it from exceeding max-height defined in CSS
+          const newHeight = Math.min(
+            textarea.scrollHeight,
+            parseInt(window.getComputedStyle(textarea).maxHeight, 10)
+          );
+          textarea.style.height = `${newHeight}px`;
+          textarea.style.overflowY =
+            textarea.scrollHeight > newHeight ? "auto" : "hidden";
+        };
+        textarea.addEventListener("input", setHeight);
+        // Set initial height on load maybe after slight delay for render
+        setTimeout(setHeight, 10);
+
+        // Enter key to send (Shift+Enter for newline)
+        textarea.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault(); // Prevent newline
+            console.log("Sending message:", textarea.value);
+            // Add your send message logic here
+            textarea.value = ""; // Clear textarea
+            setHeight(); // Reset height after sending
+          }
         });
       }
 
-      // Example: Quick Hide (Connect this to the sidebar button and maybe a keyboard shortcut)
-      const quickHideButton = document.querySelector(
-        'aside button[title*="Quick Hide"]'
-      );
+      // Basic Slash Command Hinting
+      function checkSlashCommand(value) {
+        if (value.startsWith("/") && value.length === 1) {
+          // Show command hint dropdown relative to input bar
+          // In a real app, position it carefully
+          commandHint.classList.remove("hidden");
+        } else {
+          commandHint.classList.add("hidden");
+        }
+      }
+      // Hide hint if clicked outside
+      document.addEventListener("click", (event) => {
+        if (
+          commandHint &&
+          !commandHint.contains(event.target) &&
+          event.target !== textarea
+        ) {
+          commandHint.classList.add("hidden");
+        }
+      });
+
+      // Quick Hide Functionality (Already linked via onclick)
       const quickHideOverlay = document.getElementById("quickHideOverlay");
-
-      if (quickHideButton && quickHideOverlay) {
-        quickHideButton.addEventListener("click", () => {
-          quickHideOverlay.classList.remove("hidden");
-          // In a real app, you'd need a way to bring it back (e.g., specific key combo, timer)
-          console.log("Quick Hide Activated. Implement reactivation logic.");
-        });
-
-        // Optional: Add keyboard shortcut listener (e.g., Cmd+H or Ctrl+H)
+      if (quickHideOverlay) {
+        // Allow Escape key to close the overlay
         document.addEventListener("keydown", (event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === "h") {
-            event.preventDefault(); // Prevent default browser hide
-            if (quickHideOverlay.classList.contains("hidden")) {
-              quickHideOverlay.classList.remove("hidden");
-              console.log("Quick Hide Activated via shortcut.");
-            } else {
-              quickHideOverlay.classList.add("hidden");
-              console.log("Quick Hide Deactivated via shortcut.");
-            }
-          }
-          // Allow escape to close overlay if active
           if (
             event.key === "Escape" &&
             !quickHideOverlay.classList.contains("hidden")
@@ -650,51 +748,47 @@ Your goal is to manage stress more effectively.</textarea
             quickHideOverlay.classList.add("hidden");
             console.log("Quick Hide Deactivated via Escape.");
           }
+          // Cmd/Ctrl + H toggle
+          if ((event.metaKey || event.ctrlKey) && event.key === "h") {
+            event.preventDefault();
+            quickHideOverlay.classList.toggle("hidden");
+            console.log("Quick Hide Toggled via shortcut.");
+          }
         });
-
-        // Simple click on overlay to dismiss (for demo purposes)
+        // Optionally close on click (be careful not to prevent interaction if needed later)
         quickHideOverlay.addEventListener("click", () => {
           quickHideOverlay.classList.add("hidden");
           console.log("Quick Hide Deactivated via click.");
         });
       }
 
-      // Add auto-grow for textarea
-      const textarea = document.querySelector("textarea");
-      if (textarea) {
-        textarea.addEventListener("input", () => {
-          textarea.style.height = "auto"; // Reset height
-          textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
-          // Optional: Limit max height if needed before adding scrollbar
-          // if (textarea.scrollHeight > 200) { // Example max height
-          //   textarea.style.overflowY = 'auto';
-          //   textarea.style.height = '200px';
-          // } else {
-          //   textarea.style.overflowY = 'hidden';
-          // }
+      // Memory Vault Modal Functionality (Already linked via onclick)
+
+      // Pill Switch Active State Toggle (Example)
+      const pillButtons = document.querySelectorAll(".pill-switch button");
+      pillButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          pillButtons.forEach((btn) => {
+            btn.classList.remove("active");
+            btn.setAttribute("aria-pressed", "false");
+          });
+          button.classList.add("active");
+          button.setAttribute("aria-pressed", "true");
+          console.log("Mode changed to:", button.textContent);
+          // Add logic to handle mode change
         });
-        // Set initial height on load
-        textarea.style.height = "auto";
-        textarea.style.height = `${textarea.scrollHeight}px`;
-      }
+      });
 
-      // Placeholder for blur on inactive tab (Requires more complex JS/Browser API)
-      // window.addEventListener('blur', () => { document.body.classList.add('backdrop-blur-sm'); });
-      // window.addEventListener('focus', () => { document.body.classList.remove('backdrop-blur-sm'); });
+      // Add stagger animation delay dynamically (Example)
+      document.querySelectorAll(".fade-in-slide-up").forEach((el, index) => {
+        el.style.animationDelay = `${index * 0.08}s`;
+      });
 
-      // Placeholder for / command hinting in textarea (Requires JS to detect '/' and show dropdown)
-      if (textarea) {
-        textarea.addEventListener("input", (event) => {
-          const value = event.target.value;
-          if (value.endsWith("/") && value.split("/").pop() === "") {
-            console.log('Detected "/" command start. Show tool list.');
-            // Implement dropdown logic here
-          }
-          // Basic auto-grow as well
-          textarea.style.height = "auto";
+      // Initial setup calls
+      if (textarea)
+        setTimeout(() => {
           textarea.style.height = `${textarea.scrollHeight}px`;
-        });
-      }
+        }, 10); // Initial size
     </script>
   </body>
 </html>
